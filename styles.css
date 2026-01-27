@@ -632,8 +632,8 @@ body {
     box-shadow: var(--shadow-md);
 }
 
-/* ===== Wind/Wave Legends ===== */
-.wind-legend, .wave-legend {
+/* ===== Wind Legend ===== */
+.wind-legend {
     position: absolute;
     bottom: 24px;
     left: 16px;
@@ -644,19 +644,19 @@ body {
     z-index: 999;
 }
 
-.wind-legend-title, .wave-legend-title {
+.wind-legend-title {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--gray-700);
     margin-bottom: 8px;
 }
 
-.wind-scale, .wave-scale {
+.wind-scale {
     display: flex;
     gap: 2px;
 }
 
-.wind-scale-item, .wave-scale-item {
+.wind-scale-item {
     padding: 4px 8px;
     font-size: 0.7rem;
     color: white;

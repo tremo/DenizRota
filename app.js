@@ -10,9 +10,7 @@ const state = {
     markers: [],
     polyline: null,
     windOverlayVisible: false,
-    waveOverlayVisible: false,
     windLayer: null,
-    waveLayer: null,
     weatherCache: new Map(), // API sonuçlarını cache'le
     settings: {
         boatName: '',
@@ -25,10 +23,9 @@ const state = {
 };
 
 // ===== Open-Meteo API =====
-const OPEN_METEO_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 const OPEN_METEO_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
 
-async function fetchMarineWeather(lat, lng) {
+async function fetchWeather(lat, lng) {
     const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
 
     // Cache kontrolü (1 saat geçerli)
@@ -40,15 +37,6 @@ async function fetchMarineWeather(lat, lng) {
     }
 
     try {
-        // Marine API (dalga verileri)
-        const marineParams = new URLSearchParams({
-            latitude: lat.toFixed(4),
-            longitude: lng.toFixed(4),
-            hourly: 'wave_height,wave_direction,wave_period',
-            forecast_days: 7,
-            timezone: 'auto'
-        });
-
         // Weather API (rüzgar ve sıcaklık)
         const weatherParams = new URLSearchParams({
             latitude: lat.toFixed(4),
@@ -58,20 +46,15 @@ async function fetchMarineWeather(lat, lng) {
             timezone: 'auto'
         });
 
-        const [marineRes, weatherRes] = await Promise.all([
-            fetch(`${OPEN_METEO_MARINE_URL}?${marineParams}`),
-            fetch(`${OPEN_METEO_WEATHER_URL}?${weatherParams}`)
-        ]);
+        const weatherRes = await fetch(`${OPEN_METEO_WEATHER_URL}?${weatherParams}`);
 
-        if (!marineRes.ok || !weatherRes.ok) {
+        if (!weatherRes.ok) {
             throw new Error('API hatası');
         }
 
-        const marineData = await marineRes.json();
         const weatherData = await weatherRes.json();
 
         const result = {
-            marine: marineData,
             weather: weatherData
         };
 
@@ -89,32 +72,24 @@ async function fetchMarineWeather(lat, lng) {
 }
 
 function getWeatherFromAPI(apiData, dateTime) {
-    if (!apiData || !apiData.marine || !apiData.weather) {
+    if (!apiData || !apiData.weather) {
         return null;
     }
 
     const targetTime = dateTime.toISOString().slice(0, 13) + ':00';
-
-    // Marine verileri
-    const marineHourly = apiData.marine.hourly;
-    const marineIndex = marineHourly.time.findIndex(t => t === targetTime);
 
     // Weather verileri
     const weatherHourly = apiData.weather.hourly;
     const weatherIndex = weatherHourly.time.findIndex(t => t === targetTime);
 
     // En yakın saati bul (eğer exact match yoksa)
-    const mIdx = marineIndex >= 0 ? marineIndex : findClosestTimeIndex(marineHourly.time, dateTime);
     const wIdx = weatherIndex >= 0 ? weatherIndex : findClosestTimeIndex(weatherHourly.time, dateTime);
 
-    if (mIdx < 0 || wIdx < 0) {
+    if (wIdx < 0) {
         return null;
     }
 
     return {
-        waveHeight: marineHourly.wave_height?.[mIdx] || 0,
-        waveDirection: marineHourly.wave_direction?.[mIdx] || 0,
-        wavePeriod: marineHourly.wave_period?.[mIdx] || 0,
         windSpeed: (weatherHourly.wind_speed_10m?.[wIdx] || 0), // km/s
         windDirection: weatherHourly.wind_direction_10m?.[wIdx] || 0,
         temperature: weatherHourly.temperature_2m?.[wIdx] || 20
@@ -167,7 +142,6 @@ function initMap() {
 // ===== Weather Overlays =====
 function createWeatherOverlays() {
     state.windLayer = L.layerGroup();
-    state.waveLayer = L.layerGroup();
 }
 
 // Türkiye çevresindeki deniz alanları (basit polygon kontrolü)
@@ -273,66 +247,6 @@ function getWindColor(speed) {
     return '#8e44ad';
 }
 
-function generateWaveOverlay() {
-    state.waveLayer.clearLayers();
-
-    const bounds = map.getBounds();
-    const departureDate = getDepartureDateTime();
-
-    const latStep = (bounds.getNorth() - bounds.getSouth()) / 10;
-    const lngStep = (bounds.getEast() - bounds.getWest()) / 12;
-
-    for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += latStep) {
-        for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += lngStep) {
-            // Sadece deniz alanlarında göster
-            if (!isInSea(lat, lng)) continue;
-
-            const weather = getWeatherForDateTime(lat, lng, departureDate);
-            // Veri yoksa atla
-            if (!weather) continue;
-
-            const waveMarker = createWaveMarker(lat, lng, weather);
-            state.waveLayer.addLayer(waveMarker);
-        }
-    }
-
-    state.waveLayer.addTo(map);
-}
-
-function createWaveMarker(lat, lng, weather) {
-    const color = getWaveColor(weather.waveHeight);
-
-    const icon = L.divIcon({
-        className: 'wave-marker',
-        html: `<div style="
-            width: 24px;
-            height: 24px;
-            background: ${color};
-            border-radius: 50%;
-            opacity: 0.6;
-            border: 2px solid white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            color: white;
-            font-weight: bold;
-        ">${weather.waveHeight.toFixed(1)}</div>`,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12]
-    });
-
-    return L.marker([lat, lng], { icon, interactive: false });
-}
-
-function getWaveColor(height) {
-    if (height < 0.5) return '#3498db';
-    if (height < 1) return '#2ecc71';
-    if (height < 1.5) return '#f1c40f';
-    if (height < 2) return '#e67e22';
-    return '#e74c3c';
-}
-
 function toggleWindOverlay() {
     const btn = document.getElementById('toggleWindBtn');
     state.windOverlayVisible = !state.windOverlayVisible;
@@ -347,23 +261,6 @@ function toggleWindOverlay() {
         document.getElementById('windLegend').classList.add('hidden');
         state.windLayer.clearLayers();
         map.off('moveend', generateWindOverlay);
-    }
-}
-
-function toggleWaveOverlay() {
-    const btn = document.getElementById('toggleWaveBtn');
-    state.waveOverlayVisible = !state.waveOverlayVisible;
-
-    if (state.waveOverlayVisible) {
-        btn.classList.add('active');
-        document.getElementById('waveLegend').classList.remove('hidden');
-        generateWaveOverlay();
-        map.on('moveend', generateWaveOverlay);
-    } else {
-        btn.classList.remove('active');
-        document.getElementById('waveLegend').classList.add('hidden');
-        state.waveLayer.clearLayers();
-        map.off('moveend', generateWaveOverlay);
     }
 }
 
@@ -387,7 +284,6 @@ async function showWeatherPanel(lat, lng) {
         `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` + (inSea ? '' : ' (Kara)');
     document.getElementById('weatherWind').textContent = 'Yükleniyor...';
     document.getElementById('weatherDirection').textContent = '--';
-    document.getElementById('weatherWave').textContent = inSea ? 'Yükleniyor...' : '-- (kara)';
     document.getElementById('weatherTemp').textContent = '--';
     panel.classList.remove('hidden');
 
@@ -399,7 +295,6 @@ async function showWeatherPanel(lat, lng) {
     if (!weather) {
         document.getElementById('weatherWind').textContent = 'Veri yok';
         document.getElementById('weatherDirection').textContent = '--';
-        document.getElementById('weatherWave').textContent = 'Veri yok';
         document.getElementById('weatherTemp').textContent = '--';
     } else {
         const windDirection = getWindDirectionText(weather.windDirection);
@@ -407,8 +302,6 @@ async function showWeatherPanel(lat, lng) {
             `${weather.windSpeed.toFixed(1)} km/s`;
         document.getElementById('weatherDirection').textContent =
             `${windDirection} (${weather.windDirection}°)`;
-        document.getElementById('weatherWave').textContent =
-            inSea ? `${weather.waveHeight.toFixed(1)} m` : '-- (kara)';
         document.getElementById('weatherTemp').textContent =
             `${weather.temperature.toFixed(0)} °C`;
     }
@@ -621,9 +514,9 @@ function createPopupContent(waypoint, number) {
                 <small style="color: #888;">${windDirection}</small>
             </div>
             <div style="text-align: center; padding: 8px; background: #f1f3f5; border-radius: 6px;">
-                <i class="fas fa-water" style="color: #0077b6;"></i><br>
-                <strong>${waypoint.weather.waveHeight.toFixed(1)}</strong> m<br>
-                <small style="color: #888;">Dalga</small>
+                <i class="fas fa-thermometer-half" style="color: #0077b6;"></i><br>
+                <strong>${waypoint.weather.temperature.toFixed(0)}</strong> °C<br>
+                <small style="color: #888;">Sıcaklık</small>
             </div>
         </div>
     ` : `
@@ -692,7 +585,7 @@ function getDepartureDateTime() {
 // Async versiyon - API'den veri çeker (fallback yok)
 async function getWeatherForDateTimeAsync(lat, lng, dateTime) {
     try {
-        const apiData = await fetchMarineWeather(lat, lng);
+        const apiData = await fetchWeather(lat, lng);
         if (apiData) {
             const weather = getWeatherFromAPI(apiData, dateTime);
             if (weather) {
@@ -761,9 +654,6 @@ async function updateAllWeatherData() {
         if (state.windOverlayVisible) {
             generateWindOverlay();
         }
-        if (state.waveOverlayVisible) {
-            generateWaveOverlay();
-        }
 
         updateWaypointsList();
         updateRouteStats();
@@ -801,8 +691,8 @@ function getTotalDistance() {
 }
 
 function calculateRiskLevel(weather) {
-    if (weather.windSpeed >= 30 || weather.waveHeight >= 1.5) return 'red';
-    if (weather.windSpeed >= 15 || weather.waveHeight >= 0.5) return 'yellow';
+    if (weather.windSpeed >= 30) return 'red';
+    if (weather.windSpeed >= 15) return 'yellow';
     return 'green';
 }
 
@@ -879,7 +769,7 @@ function updateWaypointsList() {
         const weatherInfo = hasWeather
             ? `<i class="fas fa-wind"></i> ${wp.weather.windSpeed.toFixed(0)} km/s ${windDirection}
                &nbsp;
-               <i class="fas fa-water"></i> ${wp.weather.waveHeight.toFixed(1)}m`
+               <i class="fas fa-thermometer-half"></i> ${wp.weather.temperature.toFixed(0)}°C`
             : '<i class="fas fa-exclamation-circle"></i> Veri yok';
 
         return `
@@ -964,7 +854,6 @@ function init() {
     document.getElementById('routeModeBtn').addEventListener('click', toggleRouteMode);
     document.getElementById('clearRouteBtn').addEventListener('click', clearRoute);
     document.getElementById('toggleWindBtn').addEventListener('click', toggleWindOverlay);
-    document.getElementById('toggleWaveBtn').addEventListener('click', toggleWaveOverlay);
     document.getElementById('settingsBtn').addEventListener('click', openSettings);
     document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
