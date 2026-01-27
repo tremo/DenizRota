@@ -324,9 +324,13 @@ function toggleRouteMode() {
         btn.classList.add('active');
         instructions.classList.remove('hidden');
         closeWeatherPanel();
+        // Marker'ları sürüklenebilir yap
+        state.markers.forEach(marker => marker.dragging.enable());
     } else {
         btn.classList.remove('active');
         instructions.classList.add('hidden');
+        // Marker'ları sürüklenemez yap
+        state.markers.forEach(marker => marker.dragging.disable());
     }
 }
 
@@ -453,14 +457,19 @@ function createMarker(waypoint, number) {
         popupAnchor: [0, -35]
     });
 
-    // Create DRAGGABLE marker
+    // Create marker (draggable only in route mode)
     const marker = L.marker([waypoint.lat, waypoint.lng], {
         icon,
-        draggable: true
+        draggable: state.routeMode
     });
 
     // Drag event handlers
-    marker.on('dragstart', function() {
+    marker.on('dragstart', function(e) {
+        // Rota modu kapalıysa sürüklemeyi engelle
+        if (!state.routeMode) {
+            e.target.dragging.disable();
+            return;
+        }
         if (state.polyline) {
             state.polyline.setStyle({ opacity: 0.3 });
         }
