@@ -52,9 +52,56 @@ function initMap() {
 
 // ===== Weather Overlays =====
 function createWeatherOverlays() {
-    // Wind arrows canvas overlay
     state.windLayer = L.layerGroup();
     state.waveLayer = L.layerGroup();
+}
+
+// Türkiye çevresindeki deniz alanları (basit polygon kontrolü)
+const SEA_AREAS = [
+    // Marmara Denizi
+    { name: 'Marmara', bounds: { minLat: 40.3, maxLat: 41.1, minLng: 26.5, maxLng: 29.9 } },
+    // Ege Denizi (Türkiye kıyıları)
+    { name: 'Ege', bounds: { minLat: 36.5, maxLat: 40.3, minLng: 25.5, maxLng: 27.5 } },
+    // Karadeniz (Türkiye kıyıları)
+    { name: 'Karadeniz', bounds: { minLat: 41.0, maxLat: 43.0, minLng: 28.0, maxLng: 41.5 } },
+    // Akdeniz (Türkiye kıyıları)
+    { name: 'Akdeniz', bounds: { minLat: 35.5, maxLat: 37.0, minLng: 27.5, maxLng: 36.5 } },
+    // İstanbul Boğazı
+    { name: 'Boğaz', bounds: { minLat: 40.9, maxLat: 41.3, minLng: 28.9, maxLng: 29.2 } },
+];
+
+// Kara alanları (deniz içindeki yarımadalar ve büyük adalar hariç tutmak için)
+const LAND_EXCLUSIONS = [
+    // Trakya yarımadası (Marmara'nın kuzeyinde)
+    { minLat: 40.85, maxLat: 42.0, minLng: 26.5, maxLng: 28.0 },
+    // Anadolu (Marmara'nın güneyinde)
+    { minLat: 39.8, maxLat: 40.55, minLng: 28.5, maxLng: 30.5 },
+    // Kapıdağ Yarımadası
+    { minLat: 40.35, maxLat: 40.55, minLng: 27.8, maxLng: 28.3 },
+];
+
+function isInSea(lat, lng) {
+    // Önce deniz alanında mı kontrol et
+    let inSea = false;
+    for (const sea of SEA_AREAS) {
+        if (lat >= sea.bounds.minLat && lat <= sea.bounds.maxLat &&
+            lng >= sea.bounds.minLng && lng <= sea.bounds.maxLng) {
+            inSea = true;
+            break;
+        }
+    }
+
+    if (!inSea) return false;
+
+    // Kara hariç tutma alanlarında mı kontrol et
+    for (const land of LAND_EXCLUSIONS) {
+        if (lat >= land.minLat && lat <= land.maxLat &&
+            lng >= land.minLng && lng <= land.maxLng) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function generateWindOverlay() {
@@ -63,12 +110,15 @@ function generateWindOverlay() {
     const bounds = map.getBounds();
     const departureDate = getDepartureDateTime();
 
-    // Generate wind arrows grid
+    // Generate wind arrows grid - only on sea
     const latStep = (bounds.getNorth() - bounds.getSouth()) / 8;
     const lngStep = (bounds.getEast() - bounds.getWest()) / 10;
 
     for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += latStep) {
         for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += lngStep) {
+            // Sadece deniz alanlarında göster
+            if (!isInSea(lat, lng)) continue;
+
             const weather = getWeatherForDateTime(lat, lng, departureDate);
             const arrow = createWindArrow(lat, lng, weather);
             state.windLayer.addLayer(arrow);
@@ -117,6 +167,9 @@ function generateWaveOverlay() {
 
     for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += latStep) {
         for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += lngStep) {
+            // Sadece deniz alanlarında göster
+            if (!isInSea(lat, lng)) continue;
+
             const weather = getWeatherForDateTime(lat, lng, departureDate);
             const waveMarker = createWaveMarker(lat, lng, weather);
             state.waveLayer.addLayer(waveMarker);
@@ -210,15 +263,16 @@ function showWeatherPanel(lat, lng) {
     const departureDate = getDepartureDateTime();
     const weather = getWeatherForDateTime(lat, lng, departureDate);
     const windDirection = getWindDirectionText(weather.windDirection);
+    const inSea = isInSea(lat, lng);
 
     document.getElementById('weatherCoords').textContent =
-        `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+        `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` + (inSea ? '' : ' (Kara)');
     document.getElementById('weatherWind').textContent =
         `${weather.windSpeed.toFixed(1)} km/s`;
     document.getElementById('weatherDirection').textContent =
         `${windDirection} (${weather.windDirection}°)`;
     document.getElementById('weatherWave').textContent =
-        `${weather.waveHeight.toFixed(1)} m`;
+        inSea ? `${weather.waveHeight.toFixed(1)} m` : '-- (kara)';
     document.getElementById('weatherTemp').textContent =
         `${weather.temperature.toFixed(0)} °C`;
 
