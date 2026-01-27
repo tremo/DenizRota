@@ -13,6 +13,7 @@ const state = {
     waveOverlayVisible: false,
     windLayer: null,
     waveLayer: null,
+    weatherCache: new Map(), // API sonuçlarını cache'le
     settings: {
         boatName: '',
         boatType: 'motorlu',
@@ -22,6 +23,119 @@ const state = {
         fuelPrice: 45
     }
 };
+
+// ===== Open-Meteo API =====
+const OPEN_METEO_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
+const OPEN_METEO_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
+
+async function fetchMarineWeather(lat, lng) {
+    const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+
+    // Cache kontrolü (1 saat geçerli)
+    if (state.weatherCache.has(cacheKey)) {
+        const cached = state.weatherCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < 3600000) {
+            return cached.data;
+        }
+    }
+
+    try {
+        // Marine API (dalga verileri)
+        const marineParams = new URLSearchParams({
+            latitude: lat.toFixed(4),
+            longitude: lng.toFixed(4),
+            hourly: 'wave_height,wave_direction,wave_period',
+            forecast_days: 7,
+            timezone: 'auto'
+        });
+
+        // Weather API (rüzgar ve sıcaklık)
+        const weatherParams = new URLSearchParams({
+            latitude: lat.toFixed(4),
+            longitude: lng.toFixed(4),
+            hourly: 'wind_speed_10m,wind_direction_10m,temperature_2m',
+            forecast_days: 7,
+            timezone: 'auto'
+        });
+
+        const [marineRes, weatherRes] = await Promise.all([
+            fetch(`${OPEN_METEO_MARINE_URL}?${marineParams}`),
+            fetch(`${OPEN_METEO_WEATHER_URL}?${weatherParams}`)
+        ]);
+
+        if (!marineRes.ok || !weatherRes.ok) {
+            throw new Error('API hatası');
+        }
+
+        const marineData = await marineRes.json();
+        const weatherData = await weatherRes.json();
+
+        const result = {
+            marine: marineData,
+            weather: weatherData
+        };
+
+        // Cache'e kaydet
+        state.weatherCache.set(cacheKey, {
+            timestamp: Date.now(),
+            data: result
+        });
+
+        return result;
+    } catch (error) {
+        console.error('Hava durumu API hatası:', error);
+        return null;
+    }
+}
+
+function getWeatherFromAPI(apiData, dateTime) {
+    if (!apiData || !apiData.marine || !apiData.weather) {
+        return null;
+    }
+
+    const targetTime = dateTime.toISOString().slice(0, 13) + ':00';
+
+    // Marine verileri
+    const marineHourly = apiData.marine.hourly;
+    const marineIndex = marineHourly.time.findIndex(t => t === targetTime);
+
+    // Weather verileri
+    const weatherHourly = apiData.weather.hourly;
+    const weatherIndex = weatherHourly.time.findIndex(t => t === targetTime);
+
+    // En yakın saati bul (eğer exact match yoksa)
+    const mIdx = marineIndex >= 0 ? marineIndex : findClosestTimeIndex(marineHourly.time, dateTime);
+    const wIdx = weatherIndex >= 0 ? weatherIndex : findClosestTimeIndex(weatherHourly.time, dateTime);
+
+    if (mIdx < 0 || wIdx < 0) {
+        return null;
+    }
+
+    return {
+        waveHeight: marineHourly.wave_height?.[mIdx] || 0,
+        waveDirection: marineHourly.wave_direction?.[mIdx] || 0,
+        wavePeriod: marineHourly.wave_period?.[mIdx] || 0,
+        windSpeed: (weatherHourly.wind_speed_10m?.[wIdx] || 0), // km/s
+        windDirection: weatherHourly.wind_direction_10m?.[wIdx] || 0,
+        temperature: weatherHourly.temperature_2m?.[wIdx] || 20
+    };
+}
+
+function findClosestTimeIndex(times, targetDate) {
+    const targetMs = targetDate.getTime();
+    let closestIdx = 0;
+    let closestDiff = Infinity;
+
+    for (let i = 0; i < times.length; i++) {
+        const diff = Math.abs(new Date(times[i]).getTime() - targetMs);
+        if (diff < closestDiff) {
+            closestDiff = diff;
+            closestIdx = i;
+        }
+    }
+
+    return closestIdx;
+}
 
 // ===== Map Initialization =====
 let map;
@@ -258,15 +372,25 @@ function handleMapClick(e) {
     }
 }
 
-function showWeatherPanel(lat, lng) {
+async function showWeatherPanel(lat, lng) {
     const panel = document.getElementById('weatherPanel');
-    const departureDate = getDepartureDateTime();
-    const weather = getWeatherForDateTime(lat, lng, departureDate);
-    const windDirection = getWindDirectionText(weather.windDirection);
     const inSea = isInSea(lat, lng);
 
+    // Loading durumu göster
     document.getElementById('weatherCoords').textContent =
         `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` + (inSea ? '' : ' (Kara)');
+    document.getElementById('weatherWind').textContent = 'Yükleniyor...';
+    document.getElementById('weatherDirection').textContent = '--';
+    document.getElementById('weatherWave').textContent = inSea ? 'Yükleniyor...' : '-- (kara)';
+    document.getElementById('weatherTemp').textContent = '--';
+    panel.classList.remove('hidden');
+
+    // API'den veri al
+    const departureDate = getDepartureDateTime();
+    const weather = await getWeatherForDateTimeAsync(lat, lng, departureDate);
+    const windDirection = getWindDirectionText(weather.windDirection);
+
+    // Verileri güncelle
     document.getElementById('weatherWind').textContent =
         `${weather.windSpeed.toFixed(1)} km/s`;
     document.getElementById('weatherDirection').textContent =
@@ -279,8 +403,6 @@ function showWeatherPanel(lat, lng) {
     // Windy link
     const windyUrl = `https://windy.app/tr/forecast2/spot/${Math.abs(Math.floor(lat * 100))}${Math.abs(Math.floor(lng * 100))}/Konum+${lat.toFixed(2)}+${lng.toFixed(2)}`;
     document.getElementById('windyLink').href = windyUrl;
-
-    panel.classList.remove('hidden');
 }
 
 function closeWeatherPanel() {
@@ -317,23 +439,45 @@ function clearRoute() {
 }
 
 // ===== Waypoint Management =====
-function addWaypoint(lat, lng) {
+async function addWaypoint(lat, lng) {
     const departureDate = getDepartureDateTime();
-    const weather = getWeatherForDateTime(lat, lng, departureDate);
 
+    // Önce placeholder waypoint ekle (loading durumu)
+    const placeholderWeather = { windSpeed: 0, waveHeight: 0, windDirection: 0, temperature: 20 };
     const waypoint = {
         id: Date.now(),
         lat,
         lng,
-        weather,
-        riskLevel: calculateRiskLevel(weather)
+        weather: placeholderWeather,
+        riskLevel: 'green',
+        loading: true
     };
 
     state.waypoints.push(waypoint);
-
     const marker = createMarker(waypoint, state.waypoints.length);
     state.markers.push(marker);
     marker.addTo(map);
+
+    updatePolyline();
+    updateRouteStats();
+    updateWaypointsList();
+
+    // API'den gerçek veri al
+    const weather = await getWeatherForDateTimeAsync(lat, lng, departureDate);
+    const idx = state.waypoints.length - 1;
+
+    state.waypoints[idx] = {
+        ...waypoint,
+        weather,
+        riskLevel: calculateRiskLevel(weather),
+        loading: false
+    };
+
+    // Marker'ı güncelle
+    map.removeLayer(state.markers[idx]);
+    const newMarker = createMarker(state.waypoints[idx], idx + 1);
+    state.markers[idx] = newMarker;
+    newMarker.addTo(map);
 
     updatePolyline();
     updateRouteStats();
@@ -358,9 +502,17 @@ function removeWaypoint(index) {
     updateWaypointsList();
 }
 
-function updateWaypointPosition(index, lat, lng) {
+async function updateWaypointPosition(index, lat, lng) {
     const departureDate = getDepartureDateTime();
-    const weather = getWeatherForDateTime(lat, lng, departureDate);
+
+    // Önce konumu güncelle (hızlı feedback için)
+    state.waypoints[index].lat = lat;
+    state.waypoints[index].lng = lng;
+    updatePolyline();
+    updateRouteStats();
+
+    // API'den yeni hava durumu al
+    const weather = await getWeatherForDateTimeAsync(lat, lng, departureDate);
 
     state.waypoints[index] = {
         ...state.waypoints[index],
@@ -370,14 +522,12 @@ function updateWaypointPosition(index, lat, lng) {
         riskLevel: calculateRiskLevel(weather)
     };
 
-    // Update marker color
+    // Marker'ı güncelle
     map.removeLayer(state.markers[index]);
     const newMarker = createMarker(state.waypoints[index], index + 1);
     state.markers[index] = newMarker;
     newMarker.addTo(map);
 
-    updatePolyline();
-    updateRouteStats();
     updateWaypointsList();
 }
 
@@ -514,23 +664,34 @@ function getDepartureDateTime() {
     return new Date();
 }
 
-function getWeatherForDateTime(lat, lng, dateTime) {
-    // Simulated weather based on date/time
-    // In production, this would call a real weather API
+// Async versiyon - API'den veri çeker
+async function getWeatherForDateTimeAsync(lat, lng, dateTime) {
+    try {
+        const apiData = await fetchMarineWeather(lat, lng);
+        if (apiData) {
+            const weather = getWeatherFromAPI(apiData, dateTime);
+            if (weather) {
+                return weather;
+            }
+        }
+    } catch (error) {
+        console.warn('API hatası, fallback kullanılıyor:', error);
+    }
+
+    // Fallback: simüle edilmiş veri
+    return getWeatherForDateTimeFallback(lat, lng, dateTime);
+}
+
+// Senkron versiyon - Fallback simülasyon verisi
+function getWeatherForDateTimeFallback(lat, lng, dateTime) {
     const hour = dateTime.getHours();
     const dayOfYear = getDayOfYear(dateTime);
 
-    // Seasonal variation
     const seasonFactor = Math.sin((dayOfYear / 365) * Math.PI * 2) * 0.3;
-
-    // Time of day variation (windier in afternoon)
     const timeFactor = Math.sin(((hour - 6) / 24) * Math.PI * 2) * 0.4;
-
-    // Location-based variation
     const latFactor = (lat - 40) * 3;
     const lngFactor = (lng - 28) * 2;
 
-    // Random but consistent for same location/time
     const seed = Math.sin(lat * 1000 + lng * 100 + dayOfYear + hour) * 10000;
     const random = (seed - Math.floor(seed));
 
@@ -545,12 +706,22 @@ function getWeatherForDateTime(lat, lng, dateTime) {
     const baseTemp = 18 + seasonFactor * 10;
     const temperature = baseTemp - timeFactor * 3 + random * 5;
 
-    return {
-        windSpeed,
-        waveHeight,
-        windDirection,
-        temperature
-    };
+    return { windSpeed, waveHeight, windDirection, temperature };
+}
+
+// Eski senkron fonksiyon (overlay'ler için - önce cache'den bakar)
+function getWeatherForDateTime(lat, lng, dateTime) {
+    const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+
+    // Cache'de varsa API verisini kullan
+    if (state.weatherCache.has(cacheKey)) {
+        const cached = state.weatherCache.get(cacheKey);
+        const weather = getWeatherFromAPI(cached.data, dateTime);
+        if (weather) return weather;
+    }
+
+    // Yoksa fallback
+    return getWeatherForDateTimeFallback(lat, lng, dateTime);
 }
 
 function getDayOfYear(date) {
@@ -560,32 +731,49 @@ function getDayOfYear(date) {
     return Math.floor(diff / oneDay);
 }
 
-function updateAllWeatherData() {
+async function updateAllWeatherData() {
     const departureDate = getDepartureDateTime();
+    const btn = document.getElementById('updateWeatherBtn');
 
-    // Update all waypoints
-    state.waypoints.forEach((wp, index) => {
-        const weather = getWeatherForDateTime(wp.lat, wp.lng, departureDate);
-        state.waypoints[index].weather = weather;
-        state.waypoints[index].riskLevel = calculateRiskLevel(weather);
+    // Loading durumu
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        // Update marker
-        map.removeLayer(state.markers[index]);
-        const newMarker = createMarker(state.waypoints[index], index + 1);
-        state.markers[index] = newMarker;
-        newMarker.addTo(map);
-    });
+    try {
+        // Tüm waypoint'ler için paralel API çağrıları
+        const weatherPromises = state.waypoints.map(wp =>
+            getWeatherForDateTimeAsync(wp.lat, wp.lng, departureDate)
+        );
 
-    // Update overlays if visible
-    if (state.windOverlayVisible) {
-        generateWindOverlay();
+        const weatherResults = await Promise.all(weatherPromises);
+
+        // Waypoint'leri güncelle
+        weatherResults.forEach((weather, index) => {
+            state.waypoints[index].weather = weather;
+            state.waypoints[index].riskLevel = calculateRiskLevel(weather);
+
+            // Marker'ı güncelle
+            map.removeLayer(state.markers[index]);
+            const newMarker = createMarker(state.waypoints[index], index + 1);
+            state.markers[index] = newMarker;
+            newMarker.addTo(map);
+        });
+
+        // Overlay'leri güncelle
+        if (state.windOverlayVisible) {
+            generateWindOverlay();
+        }
+        if (state.waveOverlayVisible) {
+            generateWaveOverlay();
+        }
+
+        updateWaypointsList();
+        updateRouteStats();
+
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
     }
-    if (state.waveOverlayVisible) {
-        generateWaveOverlay();
-    }
-
-    updateWaypointsList();
-    updateRouteStats();
 }
 
 // ===== Calculations =====
