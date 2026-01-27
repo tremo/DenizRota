@@ -105,21 +105,21 @@
                             <span class="legend-icon"><i class="fas fa-check-circle"></i></span>
                             <div class="legend-text">
                                 <strong>Güvenli</strong>
-                                <span>0-15 km/s rüzgar, 0-0.5m dalga</span>
+                                <span>0-15 km/s rüzgar</span>
                             </div>
                         </div>
                         <div class="legend-item yellow">
                             <span class="legend-icon"><i class="fas fa-exclamation-triangle"></i></span>
                             <div class="legend-text">
                                 <strong>Dikkatli</strong>
-                                <span>15-30 km/s rüzgar, 0.5-1.5m dalga</span>
+                                <span>15-30 km/s rüzgar</span>
                             </div>
                         </div>
                         <div class="legend-item red">
                             <span class="legend-icon"><i class="fas fa-times-circle"></i></span>
                             <div class="legend-text">
                                 <strong>Riskli</strong>
-                                <span>30+ km/s rüzgar, 1.5m+ dalga</span>
+                                <span>30+ km/s rüzgar</span>
                             </div>
                         </div>
                     </div>
@@ -143,9 +143,6 @@
                 <button id="toggleWindBtn" class="btn btn-control" title="Rüzgar Göster">
                     <i class="fas fa-wind"></i>
                 </button>
-                <button id="toggleWaveBtn" class="btn btn-control" title="Dalga Göster">
-                    <i class="fas fa-water"></i>
-                </button>
             </div>
 
             <!-- Weather Display Panel -->
@@ -168,11 +165,6 @@
                             <i class="fas fa-compass"></i>
                             <span id="weatherDirection">--</span>
                             <small>Yön</small>
-                        </div>
-                        <div class="weather-stat">
-                            <i class="fas fa-water"></i>
-                            <span id="weatherWave">-- m</span>
-                            <small>Dalga</small>
                         </div>
                         <div class="weather-stat">
                             <i class="fas fa-thermometer-half"></i>
@@ -204,17 +196,6 @@
                 </div>
             </div>
 
-            <!-- Wave Legend Overlay -->
-            <div id="waveLegend" class="wave-legend hidden">
-                <div class="wave-legend-title">Dalga Yüksekliği (m)</div>
-                <div class="wave-scale">
-                    <div class="wave-scale-item" style="background: #3498db;">0-0.5</div>
-                    <div class="wave-scale-item" style="background: #2ecc71;">0.5-1</div>
-                    <div class="wave-scale-item" style="background: #f1c40f;">1-1.5</div>
-                    <div class="wave-scale-item" style="background: #e67e22;">1.5-2</div>
-                    <div class="wave-scale-item" style="background: #e74c3c;">2+</div>
-                </div>
-            </div>
         </div>
     </div>
 
