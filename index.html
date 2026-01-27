@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DenizRota - Tekne Rota Planlayıcı</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <i class="fas fa-ship"></i>
+            <span>DenizRota</span>
+        </div>
+        <div class="header-controls">
+            <button id="settingsBtn" class="btn btn-icon" title="Ayarlar">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Map Container -->
+        <div class="map-container">
+            <div id="map"></div>
+
+            <!-- Route Mode Toggle -->
+            <div class="route-mode-toggle">
+                <button id="routeModeBtn" class="btn btn-route-mode">
+                    <i class="fas fa-route"></i>
+                    <span>Rota Modu</span>
+                </button>
+                <button id="clearRouteBtn" class="btn btn-danger" title="Rotayı Temizle">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+
+            <!-- Map Instructions -->
+            <div id="mapInstructions" class="map-instructions hidden">
+                <i class="fas fa-info-circle"></i>
+                <span>Haritaya tıklayarak rota noktaları ekleyin</span>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-content">
+                <!-- Route Info Section -->
+                <section class="sidebar-section">
+                    <h3><i class="fas fa-anchor"></i> Rota Bilgileri</h3>
+                    <div class="route-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Toplam Mesafe</span>
+                            <span id="totalDistance" class="stat-value">0 km</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Tahmini Süre</span>
+                            <span id="estimatedTime" class="stat-value">0 saat</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Yakıt Tüketimi</span>
+                            <span id="fuelConsumption" class="stat-value">0 litre</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Yakıt Maliyeti</span>
+                            <span id="fuelCost" class="stat-value">0 ₺</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Departure Time Section -->
+                <section class="sidebar-section">
+                    <h3><i class="fas fa-clock"></i> Yola Çıkış Zamanı</h3>
+                    <div class="departure-inputs">
+                        <div class="input-group">
+                            <label for="departureDate">Tarih</label>
+                            <input type="date" id="departureDate" />
+                        </div>
+                        <div class="input-group">
+                            <label for="departureTime">Saat</label>
+                            <input type="time" id="departureTime" />
+                        </div>
+                    </div>
+                    <div class="arrival-info">
+                        <span class="arrival-label">Tahmini Varış:</span>
+                        <span id="estimatedArrival" class="arrival-value">--</span>
+                    </div>
+                </section>
+
+                <!-- Waypoints Section -->
+                <section class="sidebar-section">
+                    <h3><i class="fas fa-map-marker-alt"></i> Rota Noktaları</h3>
+                    <div id="waypointsList" class="waypoints-list">
+                        <p class="empty-message">Henüz nokta eklenmedi</p>
+                    </div>
+                </section>
+
+                <!-- Weather Legend -->
+                <section class="sidebar-section">
+                    <h3><i class="fas fa-wind"></i> Risk Göstergesi</h3>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <span class="legend-color green"></span>
+                            <span>Güvenli (0-15 km/s rüzgar)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color yellow"></span>
+                            <span>Dikkatli (15-30 km/s rüzgar)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color red"></span>
+                            <span>Riskli (30+ km/s rüzgar)</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-ship"></i> Tekne Ayarları</h2>
+                <button id="closeSettingsBtn" class="btn btn-icon">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-group">
+                    <h4>Tekne Bilgileri</h4>
+                    <div class="input-group">
+                        <label for="boatName">Tekne Adı</label>
+                        <input type="text" id="boatName" placeholder="Teknenizin adı" />
+                    </div>
+                    <div class="input-group">
+                        <label for="boatType">Tekne Tipi</label>
+                        <select id="boatType">
+                            <option value="motorlu">Motorlu Tekne</option>
+                            <option value="yelkenli">Yelkenli</option>
+                            <option value="gulet">Gulet</option>
+                            <option value="katamaran">Katamaran</option>
+                            <option value="sürat">Sürat Teknesi</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h4>Performans Değerleri</h4>
+                    <div class="input-group">
+                        <label for="avgSpeed">Ortalama Hız (km/s)</label>
+                        <input type="number" id="avgSpeed" value="20" min="1" max="100" step="0.5" />
+                        <span class="input-hint">Seyir halindeki ortalama hız</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="fuelRate">Yakıt Tüketimi (litre/saat)</label>
+                        <input type="number" id="fuelRate" value="15" min="0.1" max="500" step="0.5" />
+                        <span class="input-hint">Saatlik yakıt tüketimi</span>
+                    </div>
+                    <div class="input-group">
+                        <label for="tankCapacity">Yakıt Deposu (litre)</label>
+                        <input type="number" id="tankCapacity" value="200" min="10" max="10000" step="10" />
+                        <span class="input-hint">Toplam depo kapasitesi</span>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h4>Maliyet Hesaplama</h4>
+                    <div class="input-group">
+                        <label for="fuelPrice">Yakıt Fiyatı (₺/litre)</label>
+                        <input type="number" id="fuelPrice" value="45" min="1" max="500" step="0.5" />
+                        <span class="input-hint">Güncel deniz yakıtı fiyatı</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveSettingsBtn" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weather Popup Template (hidden) -->
+    <div id="weatherPopupTemplate" class="hidden">
+        <div class="weather-popup">
+            <div class="weather-header">
+                <span class="weather-title">Hava Durumu</span>
+                <span class="weather-coords"></span>
+            </div>
+            <div class="weather-body">
+                <div class="weather-item">
+                    <i class="fas fa-wind"></i>
+                    <span class="weather-wind">-- km/s</span>
+                </div>
+                <div class="weather-item">
+                    <i class="fas fa-water"></i>
+                    <span class="weather-wave">-- m</span>
+                </div>
+                <div class="weather-item">
+                    <i class="fas fa-compass"></i>
+                    <span class="weather-direction">--</span>
+                </div>
+            </div>
+            <a class="windy-link" href="#" target="_blank">
+                <i class="fas fa-external-link-alt"></i> Windy.app'te Detaylı Görüntüle
+            </a>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
