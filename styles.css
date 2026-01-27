@@ -388,6 +388,7 @@ body {
 .waypoint-item.green { border-left-color: var(--success-color); }
 .waypoint-item.yellow { border-left-color: var(--warning-color); }
 .waypoint-item.red { border-left-color: var(--danger-color); }
+.waypoint-item.gray { border-left-color: var(--gray-500); }
 
 .waypoint-number {
     width: 26px;
@@ -405,6 +406,7 @@ body {
 .waypoint-number.green { background: var(--success-color); }
 .waypoint-number.yellow { background: var(--warning-color); }
 .waypoint-number.red { background: var(--danger-color); }
+.waypoint-number.gray { background: var(--gray-500); }
 
 .waypoint-info {
     flex: 1;
@@ -809,6 +811,7 @@ body {
 .marker-pin.green { background: var(--success-color); }
 .marker-pin.yellow { background: var(--warning-color); }
 .marker-pin.red { background: var(--danger-color); }
+.marker-pin.gray { background: var(--gray-500); }
 
 .marker-number {
     position: absolute;

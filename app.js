@@ -234,6 +234,9 @@ function generateWindOverlay() {
             if (!isInSea(lat, lng)) continue;
 
             const weather = getWeatherForDateTime(lat, lng, departureDate);
+            // Veri yoksa atla
+            if (!weather) continue;
+
             const arrow = createWindArrow(lat, lng, weather);
             state.windLayer.addLayer(arrow);
         }
@@ -285,6 +288,9 @@ function generateWaveOverlay() {
             if (!isInSea(lat, lng)) continue;
 
             const weather = getWeatherForDateTime(lat, lng, departureDate);
+            // Veri yoksa atla
+            if (!weather) continue;
+
             const waveMarker = createWaveMarker(lat, lng, weather);
             state.waveLayer.addLayer(waveMarker);
         }
@@ -388,17 +394,24 @@ async function showWeatherPanel(lat, lng) {
     // API'den veri al
     const departureDate = getDepartureDateTime();
     const weather = await getWeatherForDateTimeAsync(lat, lng, departureDate);
-    const windDirection = getWindDirectionText(weather.windDirection);
 
-    // Verileri güncelle
-    document.getElementById('weatherWind').textContent =
-        `${weather.windSpeed.toFixed(1)} km/s`;
-    document.getElementById('weatherDirection').textContent =
-        `${windDirection} (${weather.windDirection}°)`;
-    document.getElementById('weatherWave').textContent =
-        inSea ? `${weather.waveHeight.toFixed(1)} m` : '-- (kara)';
-    document.getElementById('weatherTemp').textContent =
-        `${weather.temperature.toFixed(0)} °C`;
+    // Veri yoksa göster
+    if (!weather) {
+        document.getElementById('weatherWind').textContent = 'Veri yok';
+        document.getElementById('weatherDirection').textContent = '--';
+        document.getElementById('weatherWave').textContent = 'Veri yok';
+        document.getElementById('weatherTemp').textContent = '--';
+    } else {
+        const windDirection = getWindDirectionText(weather.windDirection);
+        document.getElementById('weatherWind').textContent =
+            `${weather.windSpeed.toFixed(1)} km/s`;
+        document.getElementById('weatherDirection').textContent =
+            `${windDirection} (${weather.windDirection}°)`;
+        document.getElementById('weatherWave').textContent =
+            inSea ? `${weather.waveHeight.toFixed(1)} m` : '-- (kara)';
+        document.getElementById('weatherTemp').textContent =
+            `${weather.temperature.toFixed(0)} °C`;
+    }
 
     // Windy link
     const windyUrl = `https://windy.app/tr/forecast2/spot/${Math.abs(Math.floor(lat * 100))}${Math.abs(Math.floor(lng * 100))}/Konum+${lat.toFixed(2)}+${lng.toFixed(2)}`;
@@ -443,13 +456,12 @@ async function addWaypoint(lat, lng) {
     const departureDate = getDepartureDateTime();
 
     // Önce placeholder waypoint ekle (loading durumu)
-    const placeholderWeather = { windSpeed: 0, waveHeight: 0, windDirection: 0, temperature: 20 };
     const waypoint = {
         id: Date.now(),
         lat,
         lng,
-        weather: placeholderWeather,
-        riskLevel: 'green',
+        weather: null,
+        riskLevel: 'gray',
         loading: true
     };
 
@@ -469,7 +481,7 @@ async function addWaypoint(lat, lng) {
     state.waypoints[idx] = {
         ...waypoint,
         weather,
-        riskLevel: calculateRiskLevel(weather),
+        riskLevel: weather ? calculateRiskLevel(weather) : 'gray',
         loading: false
     };
 
@@ -508,6 +520,8 @@ async function updateWaypointPosition(index, lat, lng) {
     // Önce konumu güncelle (hızlı feedback için)
     state.waypoints[index].lat = lat;
     state.waypoints[index].lng = lng;
+    state.waypoints[index].riskLevel = 'gray';
+    state.waypoints[index].loading = true;
     updatePolyline();
     updateRouteStats();
 
@@ -519,7 +533,8 @@ async function updateWaypointPosition(index, lat, lng) {
         lat,
         lng,
         weather,
-        riskLevel: calculateRiskLevel(weather)
+        riskLevel: weather ? calculateRiskLevel(weather) : 'gray',
+        loading: false
     };
 
     // Marker'ı güncelle
@@ -586,7 +601,8 @@ function createMarker(waypoint, number) {
 }
 
 function createPopupContent(waypoint, number) {
-    const windDirection = getWindDirectionText(waypoint.weather.windDirection);
+    const hasWeather = waypoint.weather !== null;
+    const windDirection = hasWeather ? getWindDirectionText(waypoint.weather.windDirection) : '--';
     const departureDate = getDepartureDateTime();
     const dateStr = departureDate.toLocaleDateString('tr-TR', {
         day: 'numeric',
@@ -597,6 +613,26 @@ function createPopupContent(waypoint, number) {
 
     const windyUrl = `https://windy.app/tr/forecast2/spot/${Math.abs(Math.floor(waypoint.lat * 100))}${Math.abs(Math.floor(waypoint.lng * 100))}/Nokta${number}`;
 
+    const weatherContent = hasWeather ? `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+            <div style="text-align: center; padding: 8px; background: #f1f3f5; border-radius: 6px;">
+                <i class="fas fa-wind" style="color: #0077b6;"></i><br>
+                <strong>${waypoint.weather.windSpeed.toFixed(1)}</strong> km/s<br>
+                <small style="color: #888;">${windDirection}</small>
+            </div>
+            <div style="text-align: center; padding: 8px; background: #f1f3f5; border-radius: 6px;">
+                <i class="fas fa-water" style="color: #0077b6;"></i><br>
+                <strong>${waypoint.weather.waveHeight.toFixed(1)}</strong> m<br>
+                <small style="color: #888;">Dalga</small>
+            </div>
+        </div>
+    ` : `
+        <div style="text-align: center; padding: 16px; background: #f1f3f5; border-radius: 6px; margin-bottom: 12px; color: #666;">
+            <i class="fas fa-exclamation-circle" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+            Bu konum için hava durumu verisi bulunamadı
+        </div>
+    `;
+
     return `
         <div style="padding: 12px; min-width: 200px;">
             <div style="background: linear-gradient(135deg, #0077b6, #00b4d8); color: white; margin: -12px -12px 12px -12px; padding: 10px 12px; font-weight: 600;">
@@ -605,18 +641,7 @@ function createPopupContent(waypoint, number) {
             <div style="font-size: 0.8rem; color: #666; margin-bottom: 8px;">
                 <i class="fas fa-calendar"></i> ${dateStr}
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-                <div style="text-align: center; padding: 8px; background: #f1f3f5; border-radius: 6px;">
-                    <i class="fas fa-wind" style="color: #0077b6;"></i><br>
-                    <strong>${waypoint.weather.windSpeed.toFixed(1)}</strong> km/s<br>
-                    <small style="color: #888;">${windDirection}</small>
-                </div>
-                <div style="text-align: center; padding: 8px; background: #f1f3f5; border-radius: 6px;">
-                    <i class="fas fa-water" style="color: #0077b6;"></i><br>
-                    <strong>${waypoint.weather.waveHeight.toFixed(1)}</strong> m<br>
-                    <small style="color: #888;">Dalga</small>
-                </div>
-            </div>
+            ${weatherContent}
             <a href="${windyUrl}" target="_blank" style="
                 display: block;
                 background: linear-gradient(135deg, #48cae4, #0096c7);
@@ -664,7 +689,7 @@ function getDepartureDateTime() {
     return new Date();
 }
 
-// Async versiyon - API'den veri çeker
+// Async versiyon - API'den veri çeker (fallback yok)
 async function getWeatherForDateTimeAsync(lat, lng, dateTime) {
     try {
         const apiData = await fetchMarineWeather(lat, lng);
@@ -675,41 +700,14 @@ async function getWeatherForDateTimeAsync(lat, lng, dateTime) {
             }
         }
     } catch (error) {
-        console.warn('API hatası, fallback kullanılıyor:', error);
+        console.warn('API hatası:', error);
     }
 
-    // Fallback: simüle edilmiş veri
-    return getWeatherForDateTimeFallback(lat, lng, dateTime);
+    // Veri yoksa null döndür
+    return null;
 }
 
-// Senkron versiyon - Fallback simülasyon verisi
-function getWeatherForDateTimeFallback(lat, lng, dateTime) {
-    const hour = dateTime.getHours();
-    const dayOfYear = getDayOfYear(dateTime);
-
-    const seasonFactor = Math.sin((dayOfYear / 365) * Math.PI * 2) * 0.3;
-    const timeFactor = Math.sin(((hour - 6) / 24) * Math.PI * 2) * 0.4;
-    const latFactor = (lat - 40) * 3;
-    const lngFactor = (lng - 28) * 2;
-
-    const seed = Math.sin(lat * 1000 + lng * 100 + dayOfYear + hour) * 10000;
-    const random = (seed - Math.floor(seed));
-
-    const baseWind = 12 + random * 25;
-    const windSpeed = Math.max(0, baseWind + latFactor + lngFactor + timeFactor * 10 + seasonFactor * 8);
-
-    const baseWave = 0.3 + random * 1.5;
-    const waveHeight = Math.max(0.1, baseWave + (windSpeed / 30) + seasonFactor * 0.5);
-
-    const windDirection = Math.floor((random * 360 + hour * 5 + dayOfYear) % 360);
-
-    const baseTemp = 18 + seasonFactor * 10;
-    const temperature = baseTemp - timeFactor * 3 + random * 5;
-
-    return { windSpeed, waveHeight, windDirection, temperature };
-}
-
-// Eski senkron fonksiyon (overlay'ler için - önce cache'den bakar)
+// Senkron versiyon (overlay'ler için - sadece cache'den bakar)
 function getWeatherForDateTime(lat, lng, dateTime) {
     const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
 
@@ -720,8 +718,8 @@ function getWeatherForDateTime(lat, lng, dateTime) {
         if (weather) return weather;
     }
 
-    // Yoksa fallback
-    return getWeatherForDateTimeFallback(lat, lng, dateTime);
+    // Veri yoksa null döndür
+    return null;
 }
 
 function getDayOfYear(date) {
@@ -750,7 +748,7 @@ async function updateAllWeatherData() {
         // Waypoint'leri güncelle
         weatherResults.forEach((weather, index) => {
             state.waypoints[index].weather = weather;
-            state.waypoints[index].riskLevel = calculateRiskLevel(weather);
+            state.waypoints[index].riskLevel = weather ? calculateRiskLevel(weather) : 'gray';
 
             // Marker'ı güncelle
             map.removeLayer(state.markers[index]);
@@ -876,16 +874,21 @@ function updateWaypointsList() {
     }
 
     container.innerHTML = state.waypoints.map((wp, index) => {
-        const windDirection = getWindDirectionText(wp.weather.windDirection);
+        const hasWeather = wp.weather !== null;
+        const windDirection = hasWeather ? getWindDirectionText(wp.weather.windDirection) : '--';
+        const weatherInfo = hasWeather
+            ? `<i class="fas fa-wind"></i> ${wp.weather.windSpeed.toFixed(0)} km/s ${windDirection}
+               &nbsp;
+               <i class="fas fa-water"></i> ${wp.weather.waveHeight.toFixed(1)}m`
+            : '<i class="fas fa-exclamation-circle"></i> Veri yok';
+
         return `
             <div class="waypoint-item ${wp.riskLevel}" onclick="focusWaypoint(${index})">
                 <span class="waypoint-number ${wp.riskLevel}">${index + 1}</span>
                 <div class="waypoint-info">
                     <div class="waypoint-coords">${wp.lat.toFixed(4)}°, ${wp.lng.toFixed(4)}°</div>
                     <div class="waypoint-weather">
-                        <i class="fas fa-wind"></i> ${wp.weather.windSpeed.toFixed(0)} km/s ${windDirection}
-                        &nbsp;
-                        <i class="fas fa-water"></i> ${wp.weather.waveHeight.toFixed(1)}m
+                        ${weatherInfo}
                     </div>
                 </div>
                 <button class="waypoint-delete" onclick="event.stopPropagation(); removeWaypoint(${index})" title="Sil">
