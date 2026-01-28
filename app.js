@@ -11,9 +11,16 @@ const state = {
     polyline: null,
     windOverlayVisible: false,
     windLayer: null,
+    windCanvas: null,
+    windAnimationId: null,
+    windParticles: [],
     waveOverlayVisible: false,
     waveLayer: null,
+    waveCanvas: null,
+    waveAnimationId: null,
     weatherCache: new Map(), // API sonuçlarını cache'le
+    windGridData: [], // Rüzgar grid verisi
+    waveGridData: [], // Dalga grid verisi
     settings: {
         boatName: '',
         boatType: 'motorlu',
@@ -44,7 +51,7 @@ async function fetchWeather(lat, lng) {
         const weatherParams = new URLSearchParams({
             latitude: lat.toFixed(4),
             longitude: lng.toFixed(4),
-            hourly: 'wind_speed_10m,wind_direction_10m,temperature_2m',
+            hourly: 'wind_speed_10m,wind_direction_10m,wind_gusts_10m,temperature_2m',
             forecast_days: 7,
             timezone: 'auto'
         });
@@ -53,7 +60,7 @@ async function fetchWeather(lat, lng) {
         const marineParams = new URLSearchParams({
             latitude: lat.toFixed(4),
             longitude: lng.toFixed(4),
-            hourly: 'wave_height,wave_direction,wave_period',
+            hourly: 'wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_period',
             forecast_days: 7,
             timezone: 'auto'
         });
@@ -115,10 +122,13 @@ function getWeatherFromAPI(apiData, dateTime) {
     const result = {
         windSpeed: (weatherHourly.wind_speed_10m?.[wIdx] || 0), // km/s
         windDirection: weatherHourly.wind_direction_10m?.[wIdx] || 0,
+        windGusts: weatherHourly.wind_gusts_10m?.[wIdx] || 0,
         temperature: weatherHourly.temperature_2m?.[wIdx] || 20,
         waveHeight: null,
         waveDirection: null,
-        wavePeriod: null
+        wavePeriod: null,
+        swellHeight: null,
+        swellPeriod: null
     };
 
     // Marine verileri (varsa)
@@ -131,6 +141,8 @@ function getWeatherFromAPI(apiData, dateTime) {
             result.waveHeight = marineHourly.wave_height?.[marineIdx] || null;
             result.waveDirection = marineHourly.wave_direction?.[marineIdx] || null;
             result.wavePeriod = marineHourly.wave_period?.[marineIdx] || null;
+            result.swellHeight = marineHourly.swell_wave_height?.[marineIdx] || null;
+            result.swellPeriod = marineHourly.swell_wave_period?.[marineIdx] || null;
         }
     }
 
@@ -234,149 +246,534 @@ function isInSea(lat, lng) {
     return true;
 }
 
-function generateWindOverlay() {
-    state.windLayer.clearLayers();
+// ===== Wind Particle Animation System =====
+const PARTICLE_COUNT = 3000;
+const PARTICLE_LINE_WIDTH = 1.5;
 
+function getWindColor(speed) {
+    // km/s -> knots (1 km/s ≈ 1.944 knots, ama basitlik için 1:1 kullanıyoruz)
+    if (speed < 10) return { r: 46, g: 204, b: 113, a: 0.8 };   // Yeşil - sakin
+    if (speed < 20) return { r: 241, g: 196, b: 15, a: 0.9 };   // Sarı - orta
+    if (speed < 30) return { r: 230, g: 126, b: 34, a: 0.95 };  // Turuncu - güçlü
+    if (speed < 40) return { r: 231, g: 76, b: 60, a: 1.0 };    // Kırmızı - tehlikeli
+    return { r: 142, g: 68, b: 173, a: 1.0 };                    // Mor - çok tehlikeli
+}
+
+function createWindCanvas() {
+    const container = document.getElementById('map');
+    const canvas = document.createElement('canvas');
+    canvas.id = 'windCanvas';
+    canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:450;';
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+    container.appendChild(canvas);
+    state.windCanvas = canvas;
+    return canvas;
+}
+
+function removeWindCanvas() {
+    if (state.windCanvas) {
+        state.windCanvas.remove();
+        state.windCanvas = null;
+    }
+    if (state.windAnimationId) {
+        cancelAnimationFrame(state.windAnimationId);
+        state.windAnimationId = null;
+    }
+    state.windParticles = [];
+}
+
+async function loadWindGridData() {
     const bounds = map.getBounds();
     const departureDate = getDepartureDateTime();
+    state.windGridData = [];
 
-    // Generate wind arrows grid - only on sea
-    const latStep = (bounds.getNorth() - bounds.getSouth()) / 8;
-    const lngStep = (bounds.getEast() - bounds.getWest()) / 10;
+    const gridSize = 6;
+    const latStep = (bounds.getNorth() - bounds.getSouth()) / gridSize;
+    const lngStep = (bounds.getEast() - bounds.getWest()) / gridSize;
 
-    for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += latStep) {
-        for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += lngStep) {
-            // Sadece deniz alanlarında göster
-            if (!isInSea(lat, lng)) continue;
+    const promises = [];
+    const coords = [];
 
-            const weather = getWeatherForDateTime(lat, lng, departureDate);
-            // Veri yoksa atla
-            if (!weather) continue;
-
-            const arrow = createWindArrow(lat, lng, weather);
-            state.windLayer.addLayer(arrow);
+    for (let i = 0; i <= gridSize; i++) {
+        for (let j = 0; j <= gridSize; j++) {
+            const lat = bounds.getSouth() + i * latStep;
+            const lng = bounds.getWest() + j * lngStep;
+            coords.push({ lat, lng, i, j });
+            promises.push(getWeatherForDateTimeAsync(lat, lng, departureDate));
         }
     }
 
-    state.windLayer.addTo(map);
+    const results = await Promise.all(promises);
+
+    results.forEach((weather, idx) => {
+        const { lat, lng, i, j } = coords[idx];
+        if (weather && isInSea(lat, lng)) {
+            state.windGridData.push({
+                lat, lng, i, j,
+                speed: weather.windSpeed,
+                direction: weather.windDirection,
+                gusts: weather.windGusts || weather.windSpeed
+            });
+        }
+    });
 }
 
-function createWindArrow(lat, lng, weather) {
-    const color = getWindColor(weather.windSpeed);
-    const rotation = weather.windDirection;
-    const size = Math.min(30, 15 + weather.windSpeed / 3);
+function getWindAtPoint(lat, lng) {
+    if (state.windGridData.length === 0) return null;
 
-    const icon = L.divIcon({
-        className: 'wind-arrow',
-        html: `<div style="
-            transform: rotate(${rotation}deg);
-            color: ${color};
-            font-size: ${size}px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-        "><i class="fas fa-location-arrow"></i></div>`,
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2]
+    // En yakın grid noktasını bul ve interpolasyon yap
+    let totalWeight = 0;
+    let speedSum = 0;
+    let dirXSum = 0;
+    let dirYSum = 0;
+    let gustSum = 0;
+
+    state.windGridData.forEach(point => {
+        const dist = Math.sqrt(Math.pow(lat - point.lat, 2) + Math.pow(lng - point.lng, 2));
+        if (dist < 0.0001) {
+            // Çok yakın nokta
+            return { speed: point.speed, direction: point.direction, gusts: point.gusts };
+        }
+        const weight = 1 / (dist * dist);
+        totalWeight += weight;
+        speedSum += point.speed * weight;
+        gustSum += point.gusts * weight;
+        // Yön için birim vektör kullan
+        const rad = (point.direction * Math.PI) / 180;
+        dirXSum += Math.sin(rad) * weight;
+        dirYSum += Math.cos(rad) * weight;
     });
 
-    return L.marker([lat, lng], { icon, interactive: false });
+    if (totalWeight === 0) return null;
+
+    const avgDirection = (Math.atan2(dirXSum, dirYSum) * 180 / Math.PI + 360) % 360;
+    return {
+        speed: speedSum / totalWeight,
+        direction: avgDirection,
+        gusts: gustSum / totalWeight
+    };
 }
 
-function getWindColor(speed) {
-    if (speed < 10) return '#2ecc71';
-    if (speed < 20) return '#f1c40f';
-    if (speed < 30) return '#e67e22';
-    if (speed < 40) return '#e74c3c';
-    return '#8e44ad';
+function initWindParticles() {
+    state.windParticles = [];
+    const canvas = state.windCanvas;
+    if (!canvas) return;
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        state.windParticles.push(createWindParticle(canvas));
+    }
 }
 
-function toggleWindOverlay() {
+function createWindParticle(canvas) {
+    return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        age: Math.random() * 100,
+        maxAge: 50 + Math.random() * 50
+    };
+}
+
+function animateWindParticles() {
+    const canvas = state.windCanvas;
+    if (!canvas || !state.windOverlayVisible) return;
+
+    const ctx = canvas.getContext('2d');
+    const bounds = map.getBounds();
+
+    // Fade efekti için yarı saydam siyah
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    state.windParticles.forEach(particle => {
+        // Ekran koordinatlarını lat/lng'ye çevir
+        const lngRange = bounds.getEast() - bounds.getWest();
+        const latRange = bounds.getNorth() - bounds.getSouth();
+        const lng = bounds.getWest() + (particle.x / canvas.width) * lngRange;
+        const lat = bounds.getNorth() - (particle.y / canvas.height) * latRange;
+
+        const wind = getWindAtPoint(lat, lng);
+
+        if (wind && isInSea(lat, lng)) {
+            const color = getWindColor(wind.speed);
+            const speed = wind.speed / 5; // Hız faktörü
+            const gustFactor = wind.gusts - wind.speed;
+
+            // Yön (derece -> radyan, kuzey = 0)
+            let dirRad = ((wind.direction + 180) * Math.PI) / 180;
+
+            // Gust efekti: yüksek gust farkında titreme
+            if (gustFactor > 10) {
+                const turbulence = (gustFactor - 10) / 20;
+                const noise = (Math.random() - 0.5) * turbulence * Math.PI * 0.3;
+                dirRad += noise;
+            }
+
+            const dx = Math.sin(dirRad) * speed;
+            const dy = -Math.cos(dirRad) * speed;
+
+            // Eski pozisyon
+            const oldX = particle.x;
+            const oldY = particle.y;
+
+            // Yeni pozisyon
+            particle.x += dx;
+            particle.y += dy;
+            particle.age++;
+
+            // Kuyruk uzunluğu hıza bağlı
+            const tailLength = Math.min(speed * 2, 15);
+
+            // Çizgi çiz
+            ctx.beginPath();
+            ctx.moveTo(oldX, oldY);
+            ctx.lineTo(particle.x, particle.y);
+            ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a * (1 - particle.age / particle.maxAge)})`;
+            ctx.lineWidth = PARTICLE_LINE_WIDTH;
+            ctx.stroke();
+
+            // Yaşlanma ve yeniden doğum
+            if (particle.age > particle.maxAge ||
+                particle.x < 0 || particle.x > canvas.width ||
+                particle.y < 0 || particle.y > canvas.height) {
+                particle.x = Math.random() * canvas.width;
+                particle.y = Math.random() * canvas.height;
+                particle.age = 0;
+                particle.maxAge = 50 + Math.random() * 50;
+            }
+        } else {
+            // Deniz dışında: parçacığı yeniden konumlandır
+            particle.x = Math.random() * canvas.width;
+            particle.y = Math.random() * canvas.height;
+            particle.age = 0;
+        }
+    });
+
+    state.windAnimationId = requestAnimationFrame(animateWindParticles);
+}
+
+async function toggleWindOverlay() {
     const btn = document.getElementById('toggleWindBtn');
     state.windOverlayVisible = !state.windOverlayVisible;
 
     if (state.windOverlayVisible) {
         btn.classList.add('active');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('windLegend').classList.remove('hidden');
-        generateWindOverlay();
-        map.on('moveend', generateWindOverlay);
+
+        createWindCanvas();
+        await loadWindGridData();
+        initWindParticles();
+        animateWindParticles();
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-wind"></i>';
+
+        map.on('moveend', onWindMapMove);
+        map.on('resize', onWindCanvasResize);
     } else {
         btn.classList.remove('active');
         document.getElementById('windLegend').classList.add('hidden');
-        state.windLayer.clearLayers();
-        map.off('moveend', generateWindOverlay);
+        removeWindCanvas();
+        map.off('moveend', onWindMapMove);
+        map.off('resize', onWindCanvasResize);
     }
 }
 
-// ===== Wave Overlay =====
-function generateWaveOverlay() {
-    state.waveLayer.clearLayers();
+async function onWindMapMove() {
+    if (!state.windOverlayVisible) return;
+    const canvas = state.windCanvas;
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    await loadWindGridData();
+    initWindParticles();
+}
 
+function onWindCanvasResize() {
+    if (state.windCanvas) {
+        const container = document.getElementById('map');
+        state.windCanvas.width = container.offsetWidth;
+        state.windCanvas.height = container.offsetHeight;
+        initWindParticles();
+    }
+}
+
+// ===== Wave Texture Animation System =====
+function getWaveColor(height) {
+    if (height < 0.5) return { r: 46, g: 204, b: 113 };   // Yeşil - sakin
+    if (height < 1.0) return { r: 52, g: 152, b: 219 };   // Mavi - hafif
+    if (height < 1.5) return { r: 241, g: 196, b: 15 };   // Sarı - orta
+    if (height < 2.0) return { r: 230, g: 126, b: 34 };   // Turuncu - yüksek
+    if (height < 3.0) return { r: 231, g: 76, b: 60 };    // Kırmızı - tehlikeli
+    return { r: 142, g: 68, b: 173 };                      // Mor - çok tehlikeli
+}
+
+function createWaveCanvas() {
+    const container = document.getElementById('map');
+    const canvas = document.createElement('canvas');
+    canvas.id = 'waveCanvas';
+    canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:440;';
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+    container.appendChild(canvas);
+    state.waveCanvas = canvas;
+    return canvas;
+}
+
+function removeWaveCanvas() {
+    if (state.waveCanvas) {
+        state.waveCanvas.remove();
+        state.waveCanvas = null;
+    }
+    if (state.waveAnimationId) {
+        cancelAnimationFrame(state.waveAnimationId);
+        state.waveAnimationId = null;
+    }
+}
+
+async function loadWaveGridData() {
     const bounds = map.getBounds();
     const departureDate = getDepartureDateTime();
+    state.waveGridData = [];
 
-    // Generate wave markers grid - only on sea
-    const latStep = (bounds.getNorth() - bounds.getSouth()) / 8;
-    const lngStep = (bounds.getEast() - bounds.getWest()) / 10;
+    const gridSize = 8;
+    const latStep = (bounds.getNorth() - bounds.getSouth()) / gridSize;
+    const lngStep = (bounds.getEast() - bounds.getWest()) / gridSize;
 
-    for (let lat = bounds.getSouth(); lat <= bounds.getNorth(); lat += latStep) {
-        for (let lng = bounds.getWest(); lng <= bounds.getEast(); lng += lngStep) {
-            // Sadece deniz alanlarında göster
-            if (!isInSea(lat, lng)) continue;
+    const promises = [];
+    const coords = [];
 
-            const weather = getWeatherForDateTime(lat, lng, departureDate);
-            // Dalga verisi yoksa atla
-            if (!weather || weather.waveHeight === null) continue;
-
-            const marker = createWaveMarker(lat, lng, weather);
-            state.waveLayer.addLayer(marker);
+    for (let i = 0; i <= gridSize; i++) {
+        for (let j = 0; j <= gridSize; j++) {
+            const lat = bounds.getSouth() + i * latStep;
+            const lng = bounds.getWest() + j * lngStep;
+            coords.push({ lat, lng, i, j });
+            promises.push(getWeatherForDateTimeAsync(lat, lng, departureDate));
         }
     }
 
-    state.waveLayer.addTo(map);
+    const results = await Promise.all(promises);
+
+    results.forEach((weather, idx) => {
+        const { lat, lng, i, j } = coords[idx];
+        if (weather && weather.waveHeight !== null && isInSea(lat, lng)) {
+            state.waveGridData.push({
+                lat, lng, i, j,
+                height: weather.waveHeight,
+                direction: weather.waveDirection || 0,
+                period: weather.swellPeriod || weather.wavePeriod || 6
+            });
+        }
+    });
 }
 
-function createWaveMarker(lat, lng, weather) {
-    const color = getWaveColor(weather.waveHeight);
-    const rotation = weather.waveDirection || 0;
-    const size = Math.min(30, 15 + weather.waveHeight * 5);
+function getWaveAtPoint(lat, lng) {
+    if (state.waveGridData.length === 0) return null;
 
-    const icon = L.divIcon({
-        className: 'wave-marker',
-        html: `<div style="
-            transform: rotate(${rotation}deg);
-            color: ${color};
-            font-size: ${size}px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-        "><i class="fas fa-water"></i></div>`,
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2]
+    let totalWeight = 0;
+    let heightSum = 0;
+    let periodSum = 0;
+    let dirXSum = 0;
+    let dirYSum = 0;
+
+    state.waveGridData.forEach(point => {
+        const dist = Math.sqrt(Math.pow(lat - point.lat, 2) + Math.pow(lng - point.lng, 2));
+        if (dist < 0.0001) {
+            return { height: point.height, direction: point.direction, period: point.period };
+        }
+        const weight = 1 / (dist * dist);
+        totalWeight += weight;
+        heightSum += point.height * weight;
+        periodSum += point.period * weight;
+        const rad = (point.direction * Math.PI) / 180;
+        dirXSum += Math.sin(rad) * weight;
+        dirYSum += Math.cos(rad) * weight;
     });
 
-    return L.marker([lat, lng], { icon, interactive: false });
+    if (totalWeight === 0) return null;
+
+    return {
+        height: heightSum / totalWeight,
+        direction: (Math.atan2(dirXSum, dirYSum) * 180 / Math.PI + 360) % 360,
+        period: periodSum / totalWeight
+    };
 }
 
-function getWaveColor(height) {
-    if (height < 0.5) return '#2ecc71';   // Yeşil - sakin
-    if (height < 1.0) return '#3498db';   // Mavi - hafif
-    if (height < 1.5) return '#f1c40f';   // Sarı - orta
-    if (height < 2.0) return '#e67e22';   // Turuncu - yüksek
-    if (height < 3.0) return '#e74c3c';   // Kırmızı - tehlikeli
-    return '#8e44ad';                      // Mor - çok tehlikeli
+let waveAnimationTime = 0;
+
+function animateWaveTexture() {
+    const canvas = state.waveCanvas;
+    if (!canvas || !state.waveOverlayVisible) return;
+
+    const ctx = canvas.getContext('2d');
+    const bounds = map.getBounds();
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    waveAnimationTime += 0.05;
+
+    const cellSize = 30;
+    const cols = Math.ceil(canvas.width / cellSize);
+    const rows = Math.ceil(canvas.height / cellSize);
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const x = col * cellSize + cellSize / 2;
+            const y = row * cellSize + cellSize / 2;
+
+            // Ekran koordinatlarını lat/lng'ye çevir
+            const lngRange = bounds.getEast() - bounds.getWest();
+            const latRange = bounds.getNorth() - bounds.getSouth();
+            const lng = bounds.getWest() + (x / canvas.width) * lngRange;
+            const lat = bounds.getNorth() - (y / canvas.height) * latRange;
+
+            if (!isInSea(lat, lng)) continue;
+
+            const wave = getWaveAtPoint(lat, lng);
+            if (!wave) continue;
+
+            const color = getWaveColor(wave.height);
+            const period = wave.period || 6;
+            const dirRad = (wave.direction * Math.PI) / 180;
+
+            // Dalga şekli: periyoda göre morph
+            // Period > 8s: yumuşak sinüs (swell)
+            // Period < 5s: keskin testere dişi (choppy)
+            const isSmooth = period > 8;
+            const isChoppy = period < 5;
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(dirRad);
+
+            // Dalga yüksekliğine göre amplitüd
+            const amplitude = wave.height * 5;
+            const frequency = isChoppy ? 0.5 : 0.3;
+            const waveWidth = cellSize * 0.8;
+
+            ctx.beginPath();
+
+            if (isSmooth) {
+                // Yumuşak sinüs dalgası
+                for (let i = -waveWidth / 2; i <= waveWidth / 2; i += 2) {
+                    const yOffset = Math.sin((i * frequency + waveAnimationTime) * 2) * amplitude;
+                    if (i === -waveWidth / 2) {
+                        ctx.moveTo(i, yOffset);
+                    } else {
+                        ctx.lineTo(i, yOffset);
+                    }
+                }
+            } else if (isChoppy) {
+                // Keskin testere dişi
+                const segments = 4;
+                const segmentWidth = waveWidth / segments;
+                for (let i = 0; i < segments; i++) {
+                    const startX = -waveWidth / 2 + i * segmentWidth;
+                    const phase = (waveAnimationTime + i * 0.5) % 1;
+                    const peakX = startX + segmentWidth * 0.3;
+                    const endX = startX + segmentWidth;
+
+                    if (i === 0) {
+                        ctx.moveTo(startX, amplitude * 0.3);
+                    }
+                    ctx.lineTo(peakX, -amplitude);
+                    ctx.lineTo(endX, amplitude * 0.3);
+                }
+            } else {
+                // Orta seviye - hafif dalgalı
+                for (let i = -waveWidth / 2; i <= waveWidth / 2; i += 2) {
+                    const yOffset = Math.sin((i * frequency + waveAnimationTime) * 1.5) * amplitude * 0.7;
+                    if (i === -waveWidth / 2) {
+                        ctx.moveTo(i, yOffset);
+                    } else {
+                        ctx.lineTo(i, yOffset);
+                    }
+                }
+            }
+
+            ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+            ctx.lineWidth = isChoppy ? 2.5 : 2;
+            ctx.stroke();
+
+            // İkinci dalga çizgisi (derinlik efekti)
+            ctx.beginPath();
+            const offset = 5;
+            if (isSmooth) {
+                for (let i = -waveWidth / 2; i <= waveWidth / 2; i += 2) {
+                    const yOffset = Math.sin((i * frequency + waveAnimationTime + 0.5) * 2) * amplitude * 0.6 + offset;
+                    if (i === -waveWidth / 2) {
+                        ctx.moveTo(i, yOffset);
+                    } else {
+                        ctx.lineTo(i, yOffset);
+                    }
+                }
+            } else {
+                for (let i = -waveWidth / 2; i <= waveWidth / 2; i += 2) {
+                    const yOffset = Math.sin((i * frequency + waveAnimationTime + 0.5) * 1.5) * amplitude * 0.5 + offset;
+                    if (i === -waveWidth / 2) {
+                        ctx.moveTo(i, yOffset);
+                    } else {
+                        ctx.lineTo(i, yOffset);
+                    }
+                }
+            }
+            ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.4)`;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+    }
+
+    state.waveAnimationId = requestAnimationFrame(animateWaveTexture);
 }
 
-function toggleWaveOverlay() {
+async function toggleWaveOverlay() {
     const btn = document.getElementById('toggleWaveBtn');
     state.waveOverlayVisible = !state.waveOverlayVisible;
 
     if (state.waveOverlayVisible) {
         btn.classList.add('active');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         document.getElementById('waveLegend').classList.remove('hidden');
-        generateWaveOverlay();
-        map.on('moveend', generateWaveOverlay);
+
+        createWaveCanvas();
+        await loadWaveGridData();
+        animateWaveTexture();
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-water"></i>';
+
+        map.on('moveend', onWaveMapMove);
+        map.on('resize', onWaveCanvasResize);
     } else {
         btn.classList.remove('active');
         document.getElementById('waveLegend').classList.add('hidden');
-        state.waveLayer.clearLayers();
-        map.off('moveend', generateWaveOverlay);
+        removeWaveCanvas();
+        map.off('moveend', onWaveMapMove);
+        map.off('resize', onWaveCanvasResize);
+    }
+}
+
+async function onWaveMapMove() {
+    if (!state.waveOverlayVisible) return;
+    const canvas = state.waveCanvas;
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    await loadWaveGridData();
+}
+
+function onWaveCanvasResize() {
+    if (state.waveCanvas) {
+        const container = document.getElementById('map');
+        state.waveCanvas.width = container.offsetWidth;
+        state.waveCanvas.height = container.offsetHeight;
     }
 }
 
@@ -811,10 +1208,11 @@ async function updateAllWeatherData() {
 
         // Overlay'leri güncelle
         if (state.windOverlayVisible) {
-            generateWindOverlay();
+            await loadWindGridData();
+            initWindParticles();
         }
         if (state.waveOverlayVisible) {
-            generateWaveOverlay();
+            await loadWaveGridData();
         }
 
         updateWaypointsList();
