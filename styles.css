@@ -664,6 +664,38 @@ body {
     border-radius: 3px;
 }
 
+/* ===== Wave Legend ===== */
+.wave-legend {
+    position: absolute;
+    bottom: 24px;
+    left: 160px;
+    background: white;
+    padding: 12px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    z-index: 999;
+}
+
+.wave-legend-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 8px;
+}
+
+.wave-scale {
+    display: flex;
+    gap: 2px;
+}
+
+.wave-scale-item {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+    color: white;
+    font-weight: 500;
+    border-radius: 3px;
+}
+
 /* ===== Modal ===== */
 .modal {
     position: fixed;
