@@ -34,6 +34,9 @@ const state = {
     tripTotalDistance: 0,
     tripLastPosition: null,
     currentTrip: null,
+    // User location marker
+    userLocationMarker: null,
+    userAccuracyCircle: null,
     settings: {
         boatName: '',
         boatType: 'motorlu',
@@ -1652,6 +1655,16 @@ function endTrip() {
         state.tripTimerInterval = null;
     }
 
+    // Konum marker'larını kaldır
+    if (state.userLocationMarker) {
+        map.removeLayer(state.userLocationMarker);
+        state.userLocationMarker = null;
+    }
+    if (state.userAccuracyCircle) {
+        map.removeLayer(state.userAccuracyCircle);
+        state.userAccuracyCircle = null;
+    }
+
     // Trip verilerini kaydet
     const tripDuration = Date.now() - state.tripStartTime;
     const avgSpeed = state.tripTotalDistance > 0 && tripDuration > 0
@@ -1737,9 +1750,49 @@ function handlePositionUpdate(position) {
     // UI güncelle
     updateSpeedDisplay();
 
-    // Haritayı kullanıcının konumuna ortala (opsiyonel)
-    if (state.isFullscreen) {
+    // Kullanıcı konumunu haritada göster
+    updateUserLocationMarker(latitude, longitude, accuracy, currentSpeed > 2);
+
+    // Haritayı kullanıcının konumuna ortala (yolculuk sırasında)
+    if (state.tripActive) {
         map.setView([latitude, longitude], map.getZoom(), { animate: true });
+    }
+}
+
+function updateUserLocationMarker(lat, lng, accuracy, isMoving) {
+    // Konum marker'ını oluştur veya güncelle
+    const markerIcon = L.divIcon({
+        className: 'user-location-wrapper',
+        html: `<div class="user-location-marker ${isMoving ? 'moving' : ''}"></div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+    });
+
+    if (state.userLocationMarker) {
+        state.userLocationMarker.setLatLng([lat, lng]);
+        state.userLocationMarker.setIcon(markerIcon);
+    } else {
+        state.userLocationMarker = L.marker([lat, lng], {
+            icon: markerIcon,
+            zIndexOffset: 1000
+        }).addTo(map);
+    }
+
+    // Doğruluk çemberini güncelle
+    if (accuracy && accuracy < 500) {
+        if (state.userAccuracyCircle) {
+            state.userAccuracyCircle.setLatLng([lat, lng]);
+            state.userAccuracyCircle.setRadius(accuracy);
+        } else {
+            state.userAccuracyCircle = L.circle([lat, lng], {
+                radius: accuracy,
+                className: 'user-location-accuracy',
+                stroke: true,
+                weight: 1,
+                fill: true,
+                fillOpacity: 0.15
+            }).addTo(map);
+        }
     }
 }
 
