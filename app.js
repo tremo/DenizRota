@@ -1522,7 +1522,33 @@ function init() {
         }
     });
 
+    // Sayfa açıldığında kullanıcı konumunu göster
+    showUserLocation();
+
     console.log('DenizRota v2.0 başlatıldı! 🚤');
+}
+
+// Kullanıcı konumunu göster (sayfa açıldığında)
+function showUserLocation() {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            updateUserLocationMarker(latitude, longitude, accuracy, false);
+
+            // İlk açılışta haritayı kullanıcının konumuna ortala
+            map.setView([latitude, longitude], 12);
+        },
+        (error) => {
+            console.log('Konum alınamadı:', error.message);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 60000
+        }
+    );
 }
 
 document.addEventListener('DOMContentLoaded', init);
