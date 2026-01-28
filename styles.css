@@ -934,3 +934,260 @@ body {
         right: 16px;
     }
 }
+
+/* ===== Fullscreen Mode ===== */
+.fullscreen-mode {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 9999 !important;
+    margin: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+}
+
+.fullscreen-mode .map-container {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.fullscreen-mode #map {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.fullscreen-mode .sidebar-left,
+.fullscreen-mode .header {
+    display: none !important;
+}
+
+/* ===== Trip Button ===== */
+.btn-trip {
+    transition: all 0.3s ease;
+}
+
+.btn-trip.active {
+    background: var(--danger-color) !important;
+    color: white !important;
+    animation: tripPulse 1.5s infinite;
+}
+
+.btn-trip.active i {
+    animation: none;
+}
+
+@keyframes tripPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(230, 57, 70, 0);
+    }
+}
+
+/* ===== Speed Panel ===== */
+.speed-panel {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(26, 26, 46, 0.95) 100%);
+    color: white;
+    padding: 16px 32px;
+    border-radius: 16px;
+    text-align: center;
+    z-index: 1000;
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.speed-value {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+}
+
+.speed-value span:first-child {
+    font-size: 3.5rem;
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(135deg, #00b4d8 0%, #90e0ef 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.speed-unit {
+    font-size: 1rem;
+    color: var(--gray-400);
+    font-weight: 500;
+}
+
+.speed-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 4px;
+}
+
+.trip-timer {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 1.2rem;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    color: var(--secondary-color);
+}
+
+/* ===== Trip Summary Modal ===== */
+.trip-summary-modal {
+    max-width: 420px;
+}
+
+.trip-summary-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.trip-stat-item {
+    background: linear-gradient(135deg, var(--gray-100) 0%, white 100%);
+    padding: 20px;
+    border-radius: var(--border-radius);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--gray-200);
+}
+
+.trip-stat-item i {
+    font-size: 1.8rem;
+    color: var(--primary-color);
+    margin-bottom: 12px;
+    display: block;
+}
+
+.trip-stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.trip-stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--dark-color);
+    line-height: 1.2;
+}
+
+.trip-stat-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+}
+
+/* ===== Trip History List ===== */
+.trip-history-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.trip-history-item {
+    background: var(--gray-100);
+    border-radius: var(--border-radius);
+    padding: 14px;
+    margin-bottom: 10px;
+    border-left: 4px solid var(--primary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.trip-history-item:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
+}
+
+.trip-history-date {
+    font-size: 0.8rem;
+    color: var(--gray-500);
+    margin-bottom: 8px;
+}
+
+.trip-history-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.trip-history-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--gray-700);
+}
+
+.trip-history-stat i {
+    color: var(--primary-color);
+    font-size: 0.9rem;
+}
+
+.trip-history-stat strong {
+    font-weight: 600;
+}
+
+/* ===== Mobile Fullscreen Adjustments ===== */
+@media (max-width: 768px) {
+    .speed-panel {
+        padding: 12px 24px;
+        border-radius: 12px;
+    }
+
+    .speed-value span:first-child {
+        font-size: 2.8rem;
+    }
+
+    .trip-summary-stats {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .trip-stat-item {
+        padding: 14px;
+    }
+
+    .trip-stat-value {
+        font-size: 1.4rem;
+    }
+
+    .trip-stat-item i {
+        font-size: 1.4rem;
+        margin-bottom: 8px;
+    }
+
+    /* Fullscreen mode mobilde daha iyi görünsün */
+    .fullscreen-mode .map-controls {
+        top: 10px;
+        right: 10px;
+    }
+
+    .fullscreen-mode .speed-panel {
+        top: 10px;
+    }
+
+    .fullscreen-mode .wind-legend,
+    .fullscreen-mode .wave-legend {
+        bottom: 60px;
+        left: 10px;
+    }
+
+    .fullscreen-mode .weather-panel {
+        bottom: 60px;
+    }
+}
