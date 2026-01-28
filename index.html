@@ -133,6 +133,10 @@
 
             <!-- Map Controls - Top Right -->
             <div class="map-controls">
+                <button id="fullscreenBtn" class="btn btn-control" title="Tam Ekran (F)">
+                    <i class="fas fa-expand"></i>
+                </button>
+                <div class="control-divider"></div>
                 <button id="routeModeBtn" class="btn btn-control" title="Rota Modu (R)">
                     <i class="fas fa-route"></i>
                 </button>
@@ -146,6 +150,20 @@
                 <button id="toggleWaveBtn" class="btn btn-control" title="Dalga Göster">
                     <i class="fas fa-water"></i>
                 </button>
+                <div class="control-divider"></div>
+                <button id="tripBtn" class="btn btn-control btn-trip" title="Yola Çık">
+                    <i class="fas fa-play"></i>
+                </button>
+            </div>
+
+            <!-- Speed Display Panel (shown during trip) -->
+            <div id="speedPanel" class="speed-panel hidden">
+                <div class="speed-value">
+                    <span id="currentSpeed">0</span>
+                    <span class="speed-unit">km/s</span>
+                </div>
+                <div class="speed-label">Anlık Hız</div>
+                <div class="trip-timer" id="tripTimer">00:00:00</div>
             </div>
 
             <!-- Weather Display Panel -->
@@ -285,6 +303,82 @@
             <div class="modal-footer">
                 <button id="saveSettingsBtn" class="btn btn-primary">
                     <i class="fas fa-save"></i> Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trip Summary Modal -->
+    <div id="tripSummaryModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content trip-summary-modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-flag-checkered"></i> Yolculuk Tamamlandı</h2>
+                <button id="closeTripSummaryBtn" class="btn btn-icon">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="trip-summary-stats">
+                    <div class="trip-stat-item">
+                        <i class="fas fa-clock"></i>
+                        <div class="trip-stat-content">
+                            <span id="tripDuration" class="trip-stat-value">00:00:00</span>
+                            <span class="trip-stat-label">Süre</span>
+                        </div>
+                    </div>
+                    <div class="trip-stat-item">
+                        <i class="fas fa-road"></i>
+                        <div class="trip-stat-content">
+                            <span id="tripDistance" class="trip-stat-value">0</span>
+                            <span class="trip-stat-label">km Mesafe</span>
+                        </div>
+                    </div>
+                    <div class="trip-stat-item">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <div class="trip-stat-content">
+                            <span id="tripAvgSpeed" class="trip-stat-value">0</span>
+                            <span class="trip-stat-label">km/s Ort. Hız</span>
+                        </div>
+                    </div>
+                    <div class="trip-stat-item">
+                        <i class="fas fa-bolt"></i>
+                        <div class="trip-stat-content">
+                            <span id="tripMaxSpeed" class="trip-stat-value">0</span>
+                            <span class="trip-stat-label">km/s Max Hız</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="viewTripsHistoryBtn" class="btn btn-secondary">
+                    <i class="fas fa-history"></i> Geçmiş
+                </button>
+                <button id="saveTripBtn" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Kaydet ve Kapat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trip History Modal -->
+    <div id="tripHistoryModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-history"></i> Yolculuk Geçmişi</h2>
+                <button id="closeTripHistoryBtn" class="btn btn-icon">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="tripHistoryList" class="trip-history-list">
+                    <p class="empty-message">Henüz kayıtlı yolculuk yok</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="clearTripHistoryBtn" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Geçmişi Temizle
                 </button>
             </div>
         </div>

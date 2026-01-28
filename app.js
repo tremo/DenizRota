@@ -21,6 +21,19 @@ const state = {
     weatherCache: new Map(), // API sonuçlarını cache'le
     windGridData: [], // Rüzgar grid verisi
     waveGridData: [], // Dalga grid verisi
+    // Fullscreen state
+    isFullscreen: false,
+    // Trip tracking state
+    tripActive: false,
+    tripStartTime: null,
+    tripTimerInterval: null,
+    tripWatchId: null,
+    tripPositions: [],
+    tripCurrentSpeed: 0,
+    tripMaxSpeed: 0,
+    tripTotalDistance: 0,
+    tripLastPosition: null,
+    currentTrip: null,
     settings: {
         boatName: '',
         boatType: 'motorlu',
@@ -1454,8 +1467,26 @@ function init() {
     document.getElementById('closeWeatherPanel').addEventListener('click', closeWeatherPanel);
     document.getElementById('updateWeatherBtn').addEventListener('click', updateAllWeatherData);
 
-    // Modal overlay click
-    document.querySelector('.modal-overlay').addEventListener('click', closeSettings);
+    // Fullscreen button
+    document.getElementById('fullscreenBtn').addEventListener('click', toggleFullscreen);
+
+    // Trip tracking buttons
+    document.getElementById('tripBtn').addEventListener('click', toggleTrip);
+    document.getElementById('closeTripSummaryBtn').addEventListener('click', closeTripSummary);
+    document.getElementById('saveTripBtn').addEventListener('click', saveCurrentTrip);
+    document.getElementById('viewTripsHistoryBtn').addEventListener('click', () => {
+        closeTripSummary();
+        showTripHistory();
+    });
+    document.getElementById('closeTripHistoryBtn').addEventListener('click', closeTripHistory);
+    document.getElementById('clearTripHistoryBtn').addEventListener('click', clearTripHistory);
+
+    // Modal overlay clicks
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', function() {
+            this.closest('.modal').classList.add('hidden');
+        });
+    });
 
     // Date/time change
     document.getElementById('departureDate').addEventListener('change', updateAllWeatherData);
@@ -1464,16 +1495,27 @@ function init() {
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (!document.getElementById('settingsModal').classList.contains('hidden')) {
+            if (!document.getElementById('tripSummaryModal').classList.contains('hidden')) {
+                closeTripSummary();
+            } else if (!document.getElementById('tripHistoryModal').classList.contains('hidden')) {
+                closeTripHistory();
+            } else if (!document.getElementById('settingsModal').classList.contains('hidden')) {
                 closeSettings();
             } else if (!document.getElementById('weatherPanel').classList.contains('hidden')) {
                 closeWeatherPanel();
+            } else if (state.isFullscreen) {
+                toggleFullscreen();
             } else if (state.routeMode) {
                 toggleRouteMode();
             }
         }
-        if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
-            toggleRouteMode();
+        if (document.activeElement.tagName !== 'INPUT') {
+            if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
+                toggleRouteMode();
+            }
+            if (e.key === 'f' && !e.ctrlKey && !e.metaKey) {
+                toggleFullscreen();
+            }
         }
     });
 
@@ -1485,3 +1527,371 @@ document.addEventListener('DOMContentLoaded', init);
 // Global functions for HTML onclick
 window.removeWaypoint = removeWaypoint;
 window.focusWaypoint = focusWaypoint;
+
+// ===== Fullscreen Mode =====
+function toggleFullscreen() {
+    const mainContainer = document.querySelector('.main-container');
+    const btn = document.getElementById('fullscreenBtn');
+
+    state.isFullscreen = !state.isFullscreen;
+
+    if (state.isFullscreen) {
+        mainContainer.classList.add('fullscreen-mode');
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-compress"></i>';
+        btn.title = 'Tam Ekrandan Çık (F)';
+
+        // Try native fullscreen API
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+        } else if (document.documentElement.webkitRequestFullscreen) {
+            document.documentElement.webkitRequestFullscreen();
+        }
+    } else {
+        mainContainer.classList.remove('fullscreen-mode');
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fas fa-expand"></i>';
+        btn.title = 'Tam Ekran (F)';
+
+        // Exit native fullscreen
+        if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        }
+    }
+
+    // Harita boyutunu güncelle
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 100);
+}
+
+// Listen for native fullscreen change
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && state.isFullscreen) {
+        const mainContainer = document.querySelector('.main-container');
+        const btn = document.getElementById('fullscreenBtn');
+
+        state.isFullscreen = false;
+        mainContainer.classList.remove('fullscreen-mode');
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fas fa-expand"></i>';
+        btn.title = 'Tam Ekran (F)';
+
+        setTimeout(() => map.invalidateSize(), 100);
+    }
+});
+
+// ===== Trip Tracking System =====
+function toggleTrip() {
+    if (state.tripActive) {
+        endTrip();
+    } else {
+        startTrip();
+    }
+}
+
+function startTrip() {
+    // GPS desteği kontrol et
+    if (!navigator.geolocation) {
+        alert('Tarayıcınız konum servislerini desteklemiyor!');
+        return;
+    }
+
+    const btn = document.getElementById('tripBtn');
+    const speedPanel = document.getElementById('speedPanel');
+
+    // State'i sıfırla
+    state.tripActive = true;
+    state.tripStartTime = Date.now();
+    state.tripPositions = [];
+    state.tripCurrentSpeed = 0;
+    state.tripMaxSpeed = 0;
+    state.tripTotalDistance = 0;
+    state.tripLastPosition = null;
+
+    // UI güncelle
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="fas fa-stop"></i>';
+    btn.title = 'Yolculuğu Bitir';
+    speedPanel.classList.remove('hidden');
+
+    // Timer başlat
+    state.tripTimerInterval = setInterval(updateTripTimer, 1000);
+
+    // GPS takibini başlat
+    state.tripWatchId = navigator.geolocation.watchPosition(
+        handlePositionUpdate,
+        handlePositionError,
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+
+    console.log('Yolculuk başladı! 🚤');
+}
+
+function endTrip() {
+    if (!state.tripActive) return;
+
+    const btn = document.getElementById('tripBtn');
+    const speedPanel = document.getElementById('speedPanel');
+
+    // GPS takibini durdur
+    if (state.tripWatchId !== null) {
+        navigator.geolocation.clearWatch(state.tripWatchId);
+        state.tripWatchId = null;
+    }
+
+    // Timer'ı durdur
+    if (state.tripTimerInterval) {
+        clearInterval(state.tripTimerInterval);
+        state.tripTimerInterval = null;
+    }
+
+    // Trip verilerini kaydet
+    const tripDuration = Date.now() - state.tripStartTime;
+    const avgSpeed = state.tripTotalDistance > 0 && tripDuration > 0
+        ? (state.tripTotalDistance / (tripDuration / 3600000)).toFixed(1)
+        : 0;
+
+    state.currentTrip = {
+        id: Date.now(),
+        date: new Date().toISOString(),
+        duration: tripDuration,
+        distance: state.tripTotalDistance,
+        avgSpeed: parseFloat(avgSpeed),
+        maxSpeed: state.tripMaxSpeed,
+        positions: state.tripPositions
+    };
+
+    // UI güncelle
+    state.tripActive = false;
+    btn.classList.remove('active');
+    btn.innerHTML = '<i class="fas fa-play"></i>';
+    btn.title = 'Yola Çık';
+    speedPanel.classList.add('hidden');
+
+    // Özet modalını göster
+    showTripSummary();
+
+    console.log('Yolculuk bitti! 🏁', state.currentTrip);
+}
+
+function handlePositionUpdate(position) {
+    const { latitude, longitude, speed, accuracy } = position.coords;
+    const timestamp = position.timestamp;
+
+    // Hızı km/s'ye çevir (GPS m/s verir)
+    let currentSpeed = 0;
+    if (speed !== null && speed >= 0) {
+        currentSpeed = speed * 3.6; // m/s -> km/s
+    } else if (state.tripLastPosition) {
+        // GPS hız vermezse hesapla
+        const timeDiff = (timestamp - state.tripLastPosition.timestamp) / 1000; // saniye
+        if (timeDiff > 0) {
+            const dist = calculateDistance(
+                state.tripLastPosition.lat,
+                state.tripLastPosition.lng,
+                latitude,
+                longitude
+            );
+            currentSpeed = (dist / timeDiff) * 3600; // km/s
+        }
+    }
+
+    // Düşük doğrulukta veya çok yüksek hız -> muhtemelen hata
+    if (accuracy > 50 || currentSpeed > 150) {
+        currentSpeed = state.tripCurrentSpeed; // Önceki değeri koru
+    }
+
+    state.tripCurrentSpeed = currentSpeed;
+
+    // Max hız güncelle
+    if (currentSpeed > state.tripMaxSpeed) {
+        state.tripMaxSpeed = currentSpeed;
+    }
+
+    // Mesafe hesapla
+    if (state.tripLastPosition && accuracy <= 50) {
+        const dist = calculateDistance(
+            state.tripLastPosition.lat,
+            state.tripLastPosition.lng,
+            latitude,
+            longitude
+        );
+        // Sadece makul mesafeleri ekle (hata filtresi)
+        if (dist < 1) { // 1 km'den az olmalı bir güncelleme arasında
+            state.tripTotalDistance += dist;
+        }
+    }
+
+    // Pozisyonu kaydet
+    const posData = { lat: latitude, lng: longitude, timestamp, speed: currentSpeed };
+    state.tripPositions.push(posData);
+    state.tripLastPosition = posData;
+
+    // UI güncelle
+    updateSpeedDisplay();
+
+    // Haritayı kullanıcının konumuna ortala (opsiyonel)
+    if (state.isFullscreen) {
+        map.setView([latitude, longitude], map.getZoom(), { animate: true });
+    }
+}
+
+function handlePositionError(error) {
+    console.warn('GPS hatası:', error.message);
+
+    switch (error.code) {
+        case error.PERMISSION_DENIED:
+            alert('Konum izni reddedildi. Yolculuk takibi için konum iznine ihtiyaç var.');
+            endTrip();
+            break;
+        case error.POSITION_UNAVAILABLE:
+            // Sessizce devam et, sonraki güncellemeyi bekle
+            break;
+        case error.TIMEOUT:
+            // Sessizce devam et
+            break;
+    }
+}
+
+function updateSpeedDisplay() {
+    const speedEl = document.getElementById('currentSpeed');
+    speedEl.textContent = Math.round(state.tripCurrentSpeed);
+}
+
+function updateTripTimer() {
+    if (!state.tripStartTime) return;
+
+    const elapsed = Date.now() - state.tripStartTime;
+    const timerEl = document.getElementById('tripTimer');
+    timerEl.textContent = formatDuration(elapsed);
+}
+
+function formatDuration(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return [hours, minutes, seconds]
+        .map(n => n.toString().padStart(2, '0'))
+        .join(':');
+}
+
+function showTripSummary() {
+    if (!state.currentTrip) return;
+
+    const modal = document.getElementById('tripSummaryModal');
+
+    // Değerleri doldur
+    document.getElementById('tripDuration').textContent = formatDuration(state.currentTrip.duration);
+    document.getElementById('tripDistance').textContent = state.currentTrip.distance.toFixed(2);
+    document.getElementById('tripAvgSpeed').textContent = state.currentTrip.avgSpeed.toFixed(1);
+    document.getElementById('tripMaxSpeed').textContent = state.currentTrip.maxSpeed.toFixed(1);
+
+    modal.classList.remove('hidden');
+}
+
+function closeTripSummary() {
+    document.getElementById('tripSummaryModal').classList.add('hidden');
+}
+
+function saveCurrentTrip() {
+    if (!state.currentTrip) return;
+
+    // Local storage'dan mevcut kayıtları al
+    let trips = getTripHistory();
+
+    // Yeni trip'i ekle
+    trips.unshift(state.currentTrip);
+
+    // Maksimum 50 kayıt tut
+    if (trips.length > 50) {
+        trips = trips.slice(0, 50);
+    }
+
+    // Kaydet
+    localStorage.setItem('denizRotaTrips', JSON.stringify(trips));
+
+    // Modal'ı kapat
+    closeTripSummary();
+    state.currentTrip = null;
+
+    console.log('Yolculuk kaydedildi! ✅');
+}
+
+function getTripHistory() {
+    try {
+        const saved = localStorage.getItem('denizRotaTrips');
+        return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+        console.warn('Trip history yüklenemedi:', e);
+        return [];
+    }
+}
+
+function showTripHistory() {
+    const modal = document.getElementById('tripHistoryModal');
+    const listEl = document.getElementById('tripHistoryList');
+    const trips = getTripHistory();
+
+    if (trips.length === 0) {
+        listEl.innerHTML = '<p class="empty-message"><i class="fas fa-ship"></i> Henüz kayıtlı yolculuk yok</p>';
+    } else {
+        listEl.innerHTML = trips.map(trip => {
+            const date = new Date(trip.date);
+            const dateStr = date.toLocaleDateString('tr-TR', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            return `
+                <div class="trip-history-item">
+                    <div class="trip-history-date">
+                        <i class="fas fa-calendar"></i> ${dateStr}
+                    </div>
+                    <div class="trip-history-stats">
+                        <div class="trip-history-stat">
+                            <i class="fas fa-clock"></i>
+                            <strong>${formatDuration(trip.duration)}</strong>
+                        </div>
+                        <div class="trip-history-stat">
+                            <i class="fas fa-road"></i>
+                            <strong>${trip.distance.toFixed(2)}</strong> km
+                        </div>
+                        <div class="trip-history-stat">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <strong>${trip.avgSpeed.toFixed(1)}</strong> km/s ort.
+                        </div>
+                        <div class="trip-history-stat">
+                            <i class="fas fa-bolt"></i>
+                            <strong>${trip.maxSpeed.toFixed(1)}</strong> km/s max
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeTripHistory() {
+    document.getElementById('tripHistoryModal').classList.add('hidden');
+}
+
+function clearTripHistory() {
+    if (confirm('Tüm yolculuk geçmişini silmek istediğinize emin misiniz?')) {
+        localStorage.removeItem('denizRotaTrips');
+        showTripHistory(); // Listeyi yenile
+    }
+}
