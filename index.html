@@ -6,7 +6,7 @@
     <title>DenizRota - Tekne Rota Planlayıcı</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="styles.css?v=2.1" />
+    <link rel="stylesheet" href="styles.css?v=2.2" />
 </head>
 <body>
     <!-- Header -->
@@ -143,6 +143,9 @@
                 <button id="toggleWindBtn" class="btn btn-control" title="Rüzgar Göster">
                     <i class="fas fa-wind"></i>
                 </button>
+                <button id="toggleWaveBtn" class="btn btn-control" title="Dalga Göster">
+                    <i class="fas fa-water"></i>
+                </button>
             </div>
 
             <!-- Weather Display Panel -->
@@ -172,6 +175,18 @@
                             <small>Sıcaklık</small>
                         </div>
                     </div>
+                    <div class="weather-grid" id="waveGrid" style="margin-top: 8px;">
+                        <div class="weather-stat">
+                            <i class="fas fa-water"></i>
+                            <span id="weatherWave">-- m</span>
+                            <small>Dalga</small>
+                        </div>
+                        <div class="weather-stat">
+                            <i class="fas fa-stopwatch"></i>
+                            <span id="weatherWavePeriod">-- sn</span>
+                            <small>Periyot</small>
+                        </div>
+                    </div>
                     <a id="windyLink" class="windy-btn" href="#" target="_blank">
                         <i class="fas fa-external-link-alt"></i> Windy.app'te Aç
                     </a>
@@ -193,6 +208,19 @@
                     <div class="wind-scale-item" style="background: #e67e22;">20-30</div>
                     <div class="wind-scale-item" style="background: #e74c3c;">30-40</div>
                     <div class="wind-scale-item" style="background: #8e44ad;">40+</div>
+                </div>
+            </div>
+
+            <!-- Wave Legend Overlay -->
+            <div id="waveLegend" class="wave-legend hidden">
+                <div class="wave-legend-title">Dalga Yüksekliği (m)</div>
+                <div class="wave-scale">
+                    <div class="wave-scale-item" style="background: #2ecc71;">0-0.5</div>
+                    <div class="wave-scale-item" style="background: #3498db;">0.5-1</div>
+                    <div class="wave-scale-item" style="background: #f1c40f;">1-1.5</div>
+                    <div class="wave-scale-item" style="background: #e67e22;">1.5-2</div>
+                    <div class="wave-scale-item" style="background: #e74c3c;">2-3</div>
+                    <div class="wave-scale-item" style="background: #8e44ad;">3+</div>
                 </div>
             </div>
 
@@ -264,6 +292,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.js"></script>
-    <script src="app.js?v=2.1"></script>
+    <script src="app.js?v=2.2"></script>
 </body>
 </html>
