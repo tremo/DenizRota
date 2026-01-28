@@ -1038,27 +1038,32 @@ body {
 }
 
 /* ===== User Location Marker ===== */
+.user-location-wrapper {
+    background: transparent !important;
+    border: none !important;
+}
+
 .user-location-marker {
     width: 20px;
     height: 20px;
-    background: var(--primary-color);
+    background: #0077b6;
     border: 3px solid white;
     border-radius: 50%;
-    box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.3), var(--shadow-md);
+    box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.3), 0 2px 6px rgba(0,0,0,0.3);
     animation: locationPulse 2s infinite;
 }
 
 .user-location-marker.moving {
-    background: var(--success-color);
-    box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.3), var(--shadow-md);
+    background: #2a9d8f;
+    box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.3), 0 2px 6px rgba(0,0,0,0.3);
 }
 
 @keyframes locationPulse {
     0%, 100% {
-        box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.3), var(--shadow-md);
+        box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.3), 0 2px 6px rgba(0,0,0,0.3);
     }
     50% {
-        box-shadow: 0 0 0 8px rgba(0, 119, 182, 0.1), var(--shadow-md);
+        box-shadow: 0 0 0 10px rgba(0, 119, 182, 0.1), 0 2px 6px rgba(0,0,0,0.3);
     }
 }
 
@@ -1115,7 +1120,84 @@ body {
     margin-top: 4px;
 }
 
-/* ===== Trip History List ===== */
+/* ===== Sidebar Trips List ===== */
+.trips-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.trip-item {
+    background: white;
+    border-radius: var(--border-radius);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--success-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+}
+
+.trip-item:hover {
+    transform: translateX(3px);
+    border-left-color: var(--primary-color);
+}
+
+.trip-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.trip-item-date {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+}
+
+.trip-item-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.trip-item-btn {
+    background: none;
+    border: none;
+    color: var(--gray-400);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.trip-item-btn:hover {
+    background: var(--gray-200);
+    color: var(--primary-color);
+}
+
+.trip-item-btn.delete:hover {
+    color: var(--danger-color);
+}
+
+.trip-item-stats {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+}
+
+.trip-item-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.trip-item-stat i {
+    color: var(--primary-color);
+    font-size: 0.7rem;
+}
+
+/* ===== Trip History List (Modal) ===== */
 .trip-history-list {
     max-height: 400px;
     overflow-y: auto;

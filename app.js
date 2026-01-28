@@ -37,6 +37,8 @@ const state = {
     // User location marker
     userLocationMarker: null,
     userAccuracyCircle: null,
+    // Trip route polyline
+    tripPolyline: null,
     settings: {
         boatName: '',
         boatType: 'motorlu',
@@ -1522,7 +1524,36 @@ function init() {
         }
     });
 
+    // Sayfa açıldığında kullanıcı konumunu göster
+    showUserLocation();
+
+    // Sidebar yolculuk listesini yükle
+    updateSidebarTripsList();
+
     console.log('DenizRota v2.0 başlatıldı! 🚤');
+}
+
+// Kullanıcı konumunu göster (sayfa açıldığında)
+function showUserLocation() {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            updateUserLocationMarker(latitude, longitude, accuracy, false);
+
+            // İlk açılışta haritayı kullanıcının konumuna ortala
+            map.setView([latitude, longitude], 12);
+        },
+        (error) => {
+            console.log('Konum alınamadı:', error.message);
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 60000
+        }
+    );
 }
 
 document.addEventListener('DOMContentLoaded', init);
@@ -1665,19 +1696,29 @@ function endTrip() {
         state.userAccuracyCircle = null;
     }
 
+    // Rota çizgisini kaldır
+    removeTripPolyline();
+
     // Trip verilerini kaydet
     const tripDuration = Date.now() - state.tripStartTime;
-    const avgSpeed = state.tripTotalDistance > 0 && tripDuration > 0
-        ? (state.tripTotalDistance / (tripDuration / 3600000)).toFixed(1)
+    const durationHours = tripDuration / 3600000;
+    const avgSpeed = state.tripTotalDistance > 0 && durationHours > 0
+        ? state.tripTotalDistance / durationHours
         : 0;
+
+    // Yakıt hesabı (ayarlardaki yakıt tüketim oranına göre)
+    const fuelUsed = durationHours * state.settings.fuelRate;
+    const fuelCost = fuelUsed * state.settings.fuelPrice;
 
     state.currentTrip = {
         id: Date.now(),
         date: new Date().toISOString(),
         duration: tripDuration,
         distance: state.tripTotalDistance,
-        avgSpeed: parseFloat(avgSpeed),
+        avgSpeed: parseFloat(avgSpeed.toFixed(1)),
         maxSpeed: state.tripMaxSpeed,
+        fuelUsed: parseFloat(fuelUsed.toFixed(1)),
+        fuelCost: parseFloat(fuelCost.toFixed(0)),
         positions: state.tripPositions
     };
 
@@ -1753,6 +1794,9 @@ function handlePositionUpdate(position) {
     // Kullanıcı konumunu haritada göster
     updateUserLocationMarker(latitude, longitude, accuracy, currentSpeed > 2);
 
+    // Rota çizgisini güncelle
+    updateTripPolyline();
+
     // Haritayı kullanıcının konumuna ortala (yolculuk sırasında)
     if (state.tripActive) {
         map.setView([latitude, longitude], map.getZoom(), { animate: true });
@@ -1793,6 +1837,31 @@ function updateUserLocationMarker(lat, lng, accuracy, isMoving) {
                 fillOpacity: 0.15
             }).addTo(map);
         }
+    }
+}
+
+function updateTripPolyline() {
+    if (state.tripPositions.length < 2) return;
+
+    const latlngs = state.tripPositions.map(p => [p.lat, p.lng]);
+
+    if (state.tripPolyline) {
+        state.tripPolyline.setLatLngs(latlngs);
+    } else {
+        state.tripPolyline = L.polyline(latlngs, {
+            color: '#2a9d8f',
+            weight: 4,
+            opacity: 0.8,
+            lineJoin: 'round',
+            lineCap: 'round'
+        }).addTo(map);
+    }
+}
+
+function removeTripPolyline() {
+    if (state.tripPolyline) {
+        map.removeLayer(state.tripPolyline);
+        state.tripPolyline = null;
     }
 }
 
@@ -1847,6 +1916,8 @@ function showTripSummary() {
     document.getElementById('tripDistance').textContent = state.currentTrip.distance.toFixed(2);
     document.getElementById('tripAvgSpeed').textContent = state.currentTrip.avgSpeed.toFixed(1);
     document.getElementById('tripMaxSpeed').textContent = state.currentTrip.maxSpeed.toFixed(1);
+    document.getElementById('tripFuelUsed').textContent = state.currentTrip.fuelUsed.toFixed(1);
+    document.getElementById('tripFuelCost').textContent = state.currentTrip.fuelCost.toFixed(0);
 
     modal.classList.remove('hidden');
 }
@@ -1875,6 +1946,9 @@ function saveCurrentTrip() {
     // Modal'ı kapat
     closeTripSummary();
     state.currentTrip = null;
+
+    // Sidebar listesini güncelle
+    updateSidebarTripsList();
 
     console.log('Yolculuk kaydedildi! ✅');
 }
@@ -1945,6 +2019,174 @@ function closeTripHistory() {
 function clearTripHistory() {
     if (confirm('Tüm yolculuk geçmişini silmek istediğinize emin misiniz?')) {
         localStorage.removeItem('denizRotaTrips');
-        showTripHistory(); // Listeyi yenile
+        showTripHistory(); // Modal listeyi yenile
+        updateSidebarTripsList(); // Sidebar listeyi yenile
     }
 }
+
+// ===== Sidebar Trips List =====
+function updateSidebarTripsList() {
+    const container = document.getElementById('tripsList');
+    const countBadge = document.getElementById('tripCount');
+    const trips = getTripHistory();
+
+    countBadge.textContent = trips.length;
+
+    if (trips.length === 0) {
+        container.innerHTML = `
+            <p class="empty-message">
+                <i class="fas fa-route"></i>
+                Henüz kayıtlı yolculuk yok
+            </p>
+        `;
+        return;
+    }
+
+    // Son 5 yolculuğu göster
+    const recentTrips = trips.slice(0, 5);
+
+    container.innerHTML = recentTrips.map((trip, index) => {
+        const date = new Date(trip.date);
+        const dateStr = date.toLocaleDateString('tr-TR', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        return `
+            <div class="trip-item" onclick="showTripOnMap(${index})">
+                <div class="trip-item-header">
+                    <span class="trip-item-date"><i class="fas fa-calendar"></i> ${dateStr}</span>
+                    <div class="trip-item-actions">
+                        <button class="trip-item-btn" onclick="event.stopPropagation(); showTripOnMap(${index})" title="Haritada Göster">
+                            <i class="fas fa-map-marked-alt"></i>
+                        </button>
+                        <button class="trip-item-btn delete" onclick="event.stopPropagation(); deleteTrip(${index})" title="Sil">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="trip-item-stats">
+                    <span class="trip-item-stat"><i class="fas fa-clock"></i> ${formatDuration(trip.duration)}</span>
+                    <span class="trip-item-stat"><i class="fas fa-road"></i> ${trip.distance.toFixed(1)} km</span>
+                    <span class="trip-item-stat"><i class="fas fa-gas-pump"></i> ${(trip.fuelUsed || 0).toFixed(1)} lt</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 5'ten fazla varsa "Tümünü Gör" butonu ekle
+    if (trips.length > 5) {
+        container.innerHTML += `
+            <button class="btn btn-sm btn-secondary" style="width:100%; margin-top:8px;" onclick="showTripHistory()">
+                <i class="fas fa-list"></i> Tümünü Gör (${trips.length})
+            </button>
+        `;
+    }
+}
+
+// Haritada yolculuk rotasını göster
+let displayedTripPolyline = null;
+
+function showTripOnMap(index) {
+    const trips = getTripHistory();
+    const trip = trips[index];
+
+    if (!trip || !trip.positions || trip.positions.length < 2) {
+        alert('Bu yolculuğun rota verisi bulunamadı.');
+        return;
+    }
+
+    // Önceki gösterilen rotayı kaldır
+    if (displayedTripPolyline) {
+        map.removeLayer(displayedTripPolyline);
+    }
+
+    // Rotayı çiz
+    const latlngs = trip.positions.map(p => [p.lat, p.lng]);
+    displayedTripPolyline = L.polyline(latlngs, {
+        color: '#0077b6',
+        weight: 4,
+        opacity: 0.8,
+        lineJoin: 'round',
+        lineCap: 'round'
+    }).addTo(map);
+
+    // Başlangıç ve bitiş noktalarına marker ekle
+    const startIcon = L.divIcon({
+        className: 'trip-marker-start',
+        html: '<div style="background:#2a9d8f;color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);"><i class="fas fa-play"></i></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
+
+    const endIcon = L.divIcon({
+        className: 'trip-marker-end',
+        html: '<div style="background:#e63946;color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);"><i class="fas fa-flag-checkered"></i></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
+
+    const startMarker = L.marker(latlngs[0], { icon: startIcon }).addTo(map);
+    const endMarker = L.marker(latlngs[latlngs.length - 1], { icon: endIcon }).addTo(map);
+
+    // Polyline'a marker referanslarını ekle (temizlik için)
+    displayedTripPolyline.startMarker = startMarker;
+    displayedTripPolyline.endMarker = endMarker;
+
+    // Haritayı rotaya sığdır
+    map.fitBounds(displayedTripPolyline.getBounds(), { padding: [50, 50] });
+
+    // Popup ile bilgi göster
+    const date = new Date(trip.date);
+    const dateStr = date.toLocaleDateString('tr-TR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    displayedTripPolyline.bindPopup(`
+        <div style="min-width:180px;">
+            <strong><i class="fas fa-ship"></i> Yolculuk</strong><br>
+            <small>${dateStr}</small>
+            <hr style="margin:8px 0;border:none;border-top:1px solid #eee;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.85rem;">
+                <div><i class="fas fa-clock" style="color:#0077b6;"></i> ${formatDuration(trip.duration)}</div>
+                <div><i class="fas fa-road" style="color:#0077b6;"></i> ${trip.distance.toFixed(2)} km</div>
+                <div><i class="fas fa-tachometer-alt" style="color:#0077b6;"></i> ${trip.avgSpeed.toFixed(1)} km/s</div>
+                <div><i class="fas fa-gas-pump" style="color:#0077b6;"></i> ${(trip.fuelUsed || 0).toFixed(1)} lt</div>
+            </div>
+            <button onclick="clearDisplayedTrip()" style="width:100%;margin-top:10px;padding:6px;background:#e63946;color:white;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">
+                <i class="fas fa-times"></i> Rotayı Kaldır
+            </button>
+        </div>
+    `).openPopup();
+}
+
+function clearDisplayedTrip() {
+    if (displayedTripPolyline) {
+        if (displayedTripPolyline.startMarker) map.removeLayer(displayedTripPolyline.startMarker);
+        if (displayedTripPolyline.endMarker) map.removeLayer(displayedTripPolyline.endMarker);
+        map.removeLayer(displayedTripPolyline);
+        displayedTripPolyline = null;
+    }
+}
+
+function deleteTrip(index) {
+    if (!confirm('Bu yolculuğu silmek istediğinize emin misiniz?')) return;
+
+    let trips = getTripHistory();
+    trips.splice(index, 1);
+    localStorage.setItem('denizRotaTrips', JSON.stringify(trips));
+
+    updateSidebarTripsList();
+    showTripHistory(); // Modal açıksa onu da güncelle
+}
+
+// Global fonksiyonlar
+window.showTripOnMap = showTripOnMap;
+window.clearDisplayedTrip = clearDisplayedTrip;
+window.deleteTrip = deleteTrip;
