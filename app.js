@@ -370,7 +370,8 @@ function createWindParticle(canvas) {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         age: Math.random() * 100,
-        maxAge: 50 + Math.random() * 50
+        maxAge: 50 + Math.random() * 50,
+        trail: [] // Kuyruk için pozisyon geçmişi
     };
 }
 
@@ -381,9 +382,8 @@ function animateWindParticles() {
     const ctx = canvas.getContext('2d');
     const bounds = map.getBounds();
 
-    // Fade efekti için yarı saydam siyah
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.03)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Canvas'ı temizle (harita görünür kalır)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     state.windParticles.forEach(particle => {
         // Ekran koordinatlarını lat/lng'ye çevir
@@ -412,25 +412,38 @@ function animateWindParticles() {
             const dx = Math.sin(dirRad) * speed;
             const dy = -Math.cos(dirRad) * speed;
 
-            // Eski pozisyon
-            const oldX = particle.x;
-            const oldY = particle.y;
+            // Eski pozisyonu kuyruk listesine ekle
+            particle.trail.push({ x: particle.x, y: particle.y });
+
+            // Kuyruk uzunluğunu hıza göre ayarla (max 15 nokta)
+            const maxTrailLength = Math.min(Math.floor(speed * 3) + 5, 15);
+            while (particle.trail.length > maxTrailLength) {
+                particle.trail.shift();
+            }
 
             // Yeni pozisyon
             particle.x += dx;
             particle.y += dy;
             particle.age++;
 
-            // Kuyruk uzunluğu hıza bağlı
-            const tailLength = Math.min(speed * 2, 15);
+            // Kuyruğu çiz
+            if (particle.trail.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(particle.trail[0].x, particle.trail[0].y);
 
-            // Çizgi çiz
-            ctx.beginPath();
-            ctx.moveTo(oldX, oldY);
-            ctx.lineTo(particle.x, particle.y);
-            ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a * (1 - particle.age / particle.maxAge)})`;
-            ctx.lineWidth = PARTICLE_LINE_WIDTH;
-            ctx.stroke();
+                for (let i = 1; i < particle.trail.length; i++) {
+                    ctx.lineTo(particle.trail[i].x, particle.trail[i].y);
+                }
+                ctx.lineTo(particle.x, particle.y);
+
+                // Gradient efekti için alpha değişimi
+                const alpha = color.a * (1 - particle.age / particle.maxAge) * 0.8;
+                ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+                ctx.lineWidth = PARTICLE_LINE_WIDTH;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+            }
 
             // Yaşlanma ve yeniden doğum
             if (particle.age > particle.maxAge ||
@@ -440,12 +453,14 @@ function animateWindParticles() {
                 particle.y = Math.random() * canvas.height;
                 particle.age = 0;
                 particle.maxAge = 50 + Math.random() * 50;
+                particle.trail = [];
             }
         } else {
             // Deniz dışında: parçacığı yeniden konumlandır
             particle.x = Math.random() * canvas.width;
             particle.y = Math.random() * canvas.height;
             particle.age = 0;
+            particle.trail = [];
         }
     });
 
