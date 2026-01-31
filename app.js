@@ -1581,10 +1581,13 @@ function setupAuthEventListeners() {
         closeAuthBtn.addEventListener('click', closeAuthModal);
     }
 
-    // User menu dropdown
-    const userMenuBtn = document.getElementById('userMenuBtn');
-    if (userMenuBtn) {
-        userMenuBtn.addEventListener('click', toggleUserDropdown);
+    // User avatar - toggle dropdown on click
+    const userAvatar = document.getElementById('userAvatar');
+    if (userAvatar) {
+        userAvatar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleUserDropdown();
+        });
     }
 
     // Close dropdown on outside click
@@ -1595,6 +1598,31 @@ function setupAuthEventListeners() {
             dropdown.classList.add('hidden');
         }
     });
+
+    // Profile menu items
+    const menuSavedRoutesBtn = document.getElementById('menuSavedRoutesBtn');
+    if (menuSavedRoutesBtn) {
+        menuSavedRoutesBtn.addEventListener('click', () => {
+            document.getElementById('userDropdown').classList.add('hidden');
+            scrollToSidebarSection('.saved-routes-section');
+        });
+    }
+
+    const menuTripsBtn = document.getElementById('menuTripsBtn');
+    if (menuTripsBtn) {
+        menuTripsBtn.addEventListener('click', () => {
+            document.getElementById('userDropdown').classList.add('hidden');
+            scrollToSidebarSection('.trips-section');
+        });
+    }
+
+    const menuSettingsBtn = document.getElementById('menuSettingsBtn');
+    if (menuSettingsBtn) {
+        menuSettingsBtn.addEventListener('click', () => {
+            document.getElementById('userDropdown').classList.add('hidden');
+            openSettings();
+        });
+    }
 
     // Logout button
     const logoutBtn = document.getElementById('logoutBtn');
@@ -1727,6 +1755,28 @@ function showAuthForm(formType) {
 function toggleUserDropdown() {
     const dropdown = document.getElementById('userDropdown');
     dropdown.classList.toggle('hidden');
+}
+
+// Sidebar'da belirli bir bölüme scroll yap
+function scrollToSidebarSection(sectionSelector) {
+    const sidebar = document.querySelector('.sidebar-left');
+    const section = document.querySelector(sectionSelector);
+
+    if (sidebar && section) {
+        // Mobilde sidebar'ı görünür yap
+        if (window.innerWidth <= 768) {
+            sidebar.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Bölüme scroll
+        setTimeout(() => {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            // Bölümü vurgula
+            section.classList.add('highlight');
+            setTimeout(() => section.classList.remove('highlight'), 2000);
+        }, 100);
+    }
 }
 
 async function handleEmailLogin() {

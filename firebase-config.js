@@ -562,7 +562,8 @@ function updateAuthUI(user) {
     const loginBtn = document.getElementById('loginBtn');
     const userInfo = document.getElementById('userInfo');
     const userAvatar = document.getElementById('userAvatar');
-    const userName = document.getElementById('userName');
+    const dropdownUserName = document.getElementById('dropdownUserName');
+    const dropdownUserEmail = document.getElementById('dropdownUserEmail');
     const authModal = document.getElementById('authModal');
 
     if (user) {
@@ -570,17 +571,22 @@ function updateAuthUI(user) {
         if (loginBtn) loginBtn.classList.add('hidden');
         if (userInfo) userInfo.classList.remove('hidden');
 
+        // Avatar'ı güncelle
         if (userAvatar) {
             if (user.photoURL) {
-                userAvatar.innerHTML = `<img src="${user.photoURL}" alt="Avatar" />`;
+                userAvatar.innerHTML = `<img src="${user.photoURL}" alt="Avatar" referrerpolicy="no-referrer" />`;
             } else {
                 const initial = (user.displayName || user.email || 'U')[0].toUpperCase();
                 userAvatar.innerHTML = `<span>${initial}</span>`;
             }
         }
 
-        if (userName) {
-            userName.textContent = user.displayName || user.email.split('@')[0];
+        // Dropdown header'ı güncelle
+        if (dropdownUserName) {
+            dropdownUserName.textContent = user.displayName || user.email.split('@')[0];
+        }
+        if (dropdownUserEmail) {
+            dropdownUserEmail.textContent = user.email || '';
         }
 
         // Modal açıksa kapat

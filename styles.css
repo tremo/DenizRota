@@ -1318,6 +1318,10 @@ body {
 .user-avatar {
     width: 36px;
     height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 36px;
+    max-height: 36px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
     display: flex;
@@ -1327,12 +1331,23 @@ body {
     font-weight: 700;
     font-size: 0.9rem;
     overflow: hidden;
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.2s ease;
+}
+
+.user-avatar:hover {
+    border-color: var(--secondary-color);
+    transform: scale(1.05);
 }
 
 .user-avatar img {
     width: 100%;
     height: 100%;
+    max-width: 36px;
+    max-height: 36px;
     object-fit: cover;
+    border-radius: 50%;
 }
 
 .user-name {
@@ -1353,9 +1368,40 @@ body {
     background: white;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-lg);
-    min-width: 180px;
+    min-width: 220px;
     z-index: 1001;
     overflow: hidden;
+    animation: dropdownSlide 0.2s ease;
+}
+
+@keyframes dropdownSlide {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-header {
+    padding: 16px;
+    background: linear-gradient(135deg, var(--dark-color) 0%, #16213e 100%);
+    color: white;
+}
+
+.dropdown-user-name {
+    display: block;
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 2px;
+}
+
+.dropdown-user-email {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: var(--gray-200);
+    margin: 4px 0;
 }
 
 .dropdown-item {
@@ -1380,6 +1426,34 @@ body {
 .dropdown-item i {
     width: 18px;
     color: var(--primary-color);
+}
+
+.dropdown-item.logout {
+    color: var(--danger-color);
+}
+
+.dropdown-item.logout i {
+    color: var(--danger-color);
+}
+
+.dropdown-item.logout:hover {
+    background: rgba(230, 57, 70, 0.1);
+}
+
+/* ===== Sidebar Section Highlight ===== */
+.sidebar-section.highlight {
+    animation: sectionHighlight 2s ease;
+}
+
+@keyframes sectionHighlight {
+    0%, 100% {
+        box-shadow: none;
+        background: var(--gray-100);
+    }
+    50% {
+        box-shadow: 0 0 0 3px var(--secondary-color);
+        background: rgba(0, 180, 216, 0.1);
+    }
 }
 
 /* ===== Auth Modal ===== */

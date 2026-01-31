@@ -6,7 +6,7 @@
     <title>DenizRota - Tekne Rota Planlayıcı</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="styles.css?v=2.2" />
+    <link rel="stylesheet" href="styles.css?v=2.3" />
 </head>
 <body>
     <!-- Header -->
@@ -33,24 +33,36 @@
 
             <!-- User Info (giriş yapılmışsa) -->
             <div id="userInfo" class="user-info hidden">
-                <div id="userAvatar" class="user-avatar">
+                <div id="userAvatar" class="user-avatar" title="Profil Menüsü">
                     <span>U</span>
                 </div>
-                <span id="userName" class="user-name">Kullanıcı</span>
-                <button id="userMenuBtn" class="btn btn-icon-sm" title="Kullanıcı Menüsü">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
                 <!-- User Dropdown Menu -->
                 <div id="userDropdown" class="user-dropdown hidden">
+                    <div class="dropdown-header">
+                        <span id="dropdownUserName" class="dropdown-user-name">Kullanıcı</span>
+                        <span id="dropdownUserEmail" class="dropdown-user-email">email@example.com</span>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <button id="menuSavedRoutesBtn" class="dropdown-item">
+                        <i class="fas fa-bookmark"></i> Kayıtlı Rotalar
+                    </button>
+                    <button id="menuTripsBtn" class="dropdown-item">
+                        <i class="fas fa-history"></i> Yolculuklarım
+                    </button>
+                    <button id="menuSettingsBtn" class="dropdown-item">
+                        <i class="fas fa-ship"></i> Tekne Ayarları
+                    </button>
+                    <div class="dropdown-divider"></div>
                     <button id="syncDataBtn" class="dropdown-item">
                         <i class="fas fa-cloud-upload-alt"></i> Verileri Senkronla
                     </button>
-                    <button id="logoutBtn" class="dropdown-item">
+                    <button id="logoutBtn" class="dropdown-item logout">
                         <i class="fas fa-sign-out-alt"></i> Çıkış Yap
                     </button>
                 </div>
             </div>
 
+            <!-- Login Button (giriş yapılmamışsa) - Ayarlar butonunun yanında -->
             <button id="settingsBtn" class="btn btn-icon" title="Tekne Ayarları">
                 <i class="fas fa-cog"></i>
             </button>
@@ -592,6 +604,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js?v=1.0"></script>
 
-    <script src="app.js?v=2.4"></script>
+    <script src="app.js?v=2.5"></script>
 </body>
 </html>
