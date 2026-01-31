@@ -26,6 +26,31 @@
             </div>
         </div>
         <div class="header-controls">
+            <!-- Login Button (giriş yapılmamışsa) -->
+            <button id="loginBtn" class="btn btn-icon" title="Giriş Yap">
+                <i class="fas fa-user"></i>
+            </button>
+
+            <!-- User Info (giriş yapılmışsa) -->
+            <div id="userInfo" class="user-info hidden">
+                <div id="userAvatar" class="user-avatar">
+                    <span>U</span>
+                </div>
+                <span id="userName" class="user-name">Kullanıcı</span>
+                <button id="userMenuBtn" class="btn btn-icon-sm" title="Kullanıcı Menüsü">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <!-- User Dropdown Menu -->
+                <div id="userDropdown" class="user-dropdown hidden">
+                    <button id="syncDataBtn" class="dropdown-item">
+                        <i class="fas fa-cloud-upload-alt"></i> Verileri Senkronla
+                    </button>
+                    <button id="logoutBtn" class="dropdown-item">
+                        <i class="fas fa-sign-out-alt"></i> Çıkış Yap
+                    </button>
+                </div>
+            </div>
+
             <button id="settingsBtn" class="btn btn-icon" title="Tekne Ayarları">
                 <i class="fas fa-cog"></i>
             </button>
@@ -93,6 +118,23 @@
                         <p class="empty-message">
                             <i class="fas fa-hand-pointer"></i>
                             Rota modunu açıp haritaya tıklayın
+                        </p>
+                    </div>
+                    <button id="saveRouteBtn" class="btn btn-secondary btn-block save-route-btn hidden">
+                        <i class="fas fa-save"></i> Rotayı Kaydet
+                    </button>
+                </section>
+
+                <!-- Saved Routes Section -->
+                <section class="sidebar-section saved-routes-section">
+                    <h3>
+                        <i class="fas fa-bookmark"></i> Kayıtlı Rotalar
+                        <span id="savedRouteCount" class="badge">0</span>
+                    </h3>
+                    <div id="savedRoutesList" class="saved-routes-list">
+                        <p class="empty-message">
+                            <i class="fas fa-cloud"></i>
+                            Kayıtlı rota yok
                         </p>
                     </div>
                 </section>
@@ -411,8 +453,145 @@
         </div>
     </div>
 
+    <!-- Auth Modal (Giriş/Kayıt) -->
+    <div id="authModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content auth-modal">
+            <div class="modal-header">
+                <h2 id="authModalTitle"><i class="fas fa-user-circle"></i> Giriş Yap</h2>
+                <button id="closeAuthBtn" class="btn btn-icon">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Auth Error/Success Messages -->
+                <div id="authError" class="auth-message auth-error hidden"></div>
+                <div id="authSuccess" class="auth-message auth-success hidden"></div>
+
+                <!-- Login Form -->
+                <div id="loginForm" class="auth-form">
+                    <div class="input-group">
+                        <label for="loginEmail">Email</label>
+                        <input type="email" id="loginEmail" placeholder="ornek@email.com" />
+                    </div>
+                    <div class="input-group">
+                        <label for="loginPassword">Şifre</label>
+                        <input type="password" id="loginPassword" placeholder="Şifreniz" />
+                    </div>
+                    <button id="loginSubmitBtn" class="btn btn-primary btn-block">
+                        <i class="fas fa-sign-in-alt"></i> Giriş Yap
+                    </button>
+
+                    <div class="auth-divider">
+                        <span>veya</span>
+                    </div>
+
+                    <button id="googleLoginBtn" class="btn btn-google btn-block">
+                        <i class="fab fa-google"></i> Google ile Giriş Yap
+                    </button>
+
+                    <div class="auth-links">
+                        <a href="#" id="showForgotPassword">Şifremi Unuttum</a>
+                        <span class="auth-separator">|</span>
+                        <a href="#" id="showRegister">Hesap Oluştur</a>
+                    </div>
+                </div>
+
+                <!-- Register Form -->
+                <div id="registerForm" class="auth-form hidden">
+                    <div class="input-group">
+                        <label for="registerName">Ad Soyad</label>
+                        <input type="text" id="registerName" placeholder="Adınız Soyadınız" />
+                    </div>
+                    <div class="input-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" placeholder="ornek@email.com" />
+                    </div>
+                    <div class="input-group">
+                        <label for="registerPassword">Şifre</label>
+                        <input type="password" id="registerPassword" placeholder="En az 6 karakter" />
+                    </div>
+                    <div class="input-group">
+                        <label for="registerPasswordConfirm">Şifre Tekrar</label>
+                        <input type="password" id="registerPasswordConfirm" placeholder="Şifrenizi tekrar girin" />
+                    </div>
+                    <button id="registerSubmitBtn" class="btn btn-primary btn-block">
+                        <i class="fas fa-user-plus"></i> Kayıt Ol
+                    </button>
+
+                    <div class="auth-links">
+                        <a href="#" id="showLogin">Zaten hesabım var</a>
+                    </div>
+                </div>
+
+                <!-- Forgot Password Form -->
+                <div id="forgotPasswordForm" class="auth-form hidden">
+                    <p class="auth-info">Email adresinize şifre sıfırlama bağlantısı göndereceğiz.</p>
+                    <div class="input-group">
+                        <label for="forgotEmail">Email</label>
+                        <input type="email" id="forgotEmail" placeholder="ornek@email.com" />
+                    </div>
+                    <button id="forgotSubmitBtn" class="btn btn-primary btn-block">
+                        <i class="fas fa-envelope"></i> Sıfırlama Linki Gönder
+                    </button>
+
+                    <div class="auth-links">
+                        <a href="#" id="backToLogin">Giriş sayfasına dön</a>
+                    </div>
+                </div>
+
+                <!-- Firebase Not Configured Warning -->
+                <div id="firebaseWarning" class="firebase-warning hidden">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Firebase yapılandırılmamış. <code>firebase-config.js</code> dosyasını düzenleyip kendi Firebase proje bilgilerinizi girin.</p>
+                    <a href="https://console.firebase.google.com" target="_blank" class="btn btn-sm btn-secondary">
+                        <i class="fas fa-external-link-alt"></i> Firebase Console
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Route Modal -->
+    <div id="saveRouteModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-save"></i> Rotayı Kaydet</h2>
+                <button id="closeSaveRouteBtn" class="btn btn-icon">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label for="routeName">Rota Adı</label>
+                    <input type="text" id="routeName" placeholder="Örn: İstanbul - Marmara Adası" />
+                </div>
+                <div class="input-group">
+                    <label for="routeDescription">Açıklama (Opsiyonel)</label>
+                    <textarea id="routeDescription" rows="3" placeholder="Bu rota hakkında notlar..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelSaveRouteBtn" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> İptal
+                </button>
+                <button id="confirmSaveRouteBtn" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-velocity@1.9.0/dist/leaflet-velocity.min.js"></script>
-    <script src="app.js?v=2.3"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js?v=1.0"></script>
+
+    <script src="app.js?v=2.4"></script>
 </body>
 </html>
