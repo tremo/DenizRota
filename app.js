@@ -1419,6 +1419,15 @@ function closeSettings() {
     document.getElementById('settingsModal').classList.add('hidden');
 }
 
+// ===== Guide Modal =====
+function openGuide() {
+    document.getElementById('guideModal').classList.remove('hidden');
+}
+
+function closeGuide() {
+    document.getElementById('guideModal').classList.add('hidden');
+}
+
 function loadSettingsToForm() {
     document.getElementById('boatName').value = state.settings.boatName;
     document.getElementById('boatType').value = state.settings.boatType;
@@ -1481,6 +1490,8 @@ function init() {
     document.getElementById('settingsBtn').addEventListener('click', openSettings);
     document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+    document.getElementById('closeGuideBtn').addEventListener('click', closeGuide);
+    document.getElementById('closeGuideFooterBtn').addEventListener('click', closeGuide);
     document.getElementById('closeWeatherPanel').addEventListener('click', closeWeatherPanel);
     document.getElementById('updateWeatherBtn').addEventListener('click', updateAllWeatherData);
 
@@ -1528,6 +1539,8 @@ function init() {
                 closeTripHistory();
             } else if (!document.getElementById('settingsModal').classList.contains('hidden')) {
                 closeSettings();
+            } else if (!document.getElementById('guideModal').classList.contains('hidden')) {
+                closeGuide();
             } else if (!document.getElementById('weatherPanel').classList.contains('hidden')) {
                 closeWeatherPanel();
             } else if (state.isFullscreen) {
@@ -1616,11 +1629,11 @@ function setupAuthEventListeners() {
         });
     }
 
-    const menuSettingsBtn = document.getElementById('menuSettingsBtn');
-    if (menuSettingsBtn) {
-        menuSettingsBtn.addEventListener('click', () => {
+    const menuGuideBtn = document.getElementById('menuGuideBtn');
+    if (menuGuideBtn) {
+        menuGuideBtn.addEventListener('click', () => {
             document.getElementById('userDropdown').classList.add('hidden');
-            openSettings();
+            openGuide();
         });
     }
 

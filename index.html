@@ -49,8 +49,8 @@
                     <button id="menuTripsBtn" class="dropdown-item">
                         <i class="fas fa-history"></i> Yolculuklarım
                     </button>
-                    <button id="menuSettingsBtn" class="dropdown-item">
-                        <i class="fas fa-ship"></i> Tekne Ayarları
+                    <button id="menuGuideBtn" class="dropdown-item">
+                        <i class="fas fa-info-circle"></i> Dalga ve Rüzgar Rehberi
                     </button>
                     <div class="dropdown-divider"></div>
                     <button id="syncDataBtn" class="dropdown-item">
@@ -370,6 +370,109 @@
             <div class="modal-footer">
                 <button id="saveSettingsBtn" class="btn btn-primary">
                     <i class="fas fa-save"></i> Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wave and Wind Guide Modal -->
+    <div id="guideModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content guide-modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-info-circle"></i> Dalga ve Rüzgar Rehberi</h2>
+                <button id="closeGuideBtn" class="btn btn-icon">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="guide-section">
+                    <h4><i class="fas fa-wind"></i> Rüzgar Animasyonu</h4>
+                    <p>Rüzgar animasyonu, harita üzerinde hareketli parçacıklarla rüzgarın yönünü ve hızını gösterir.</p>
+                    <div class="guide-legend">
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #00ff00;"></span>
+                            <span>0-15 km/s: Sakin - Denize çıkmak için ideal</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #ffff00;"></span>
+                            <span>15-30 km/s: Hafif - Dikkatli olunmalı</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #ffa500;"></span>
+                            <span>30-50 km/s: Orta - Deneyimli denizciler için</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #ff0000;"></span>
+                            <span>50+ km/s: Şiddetli - Denize çıkılmamalı</span>
+                        </div>
+                    </div>
+                    <p class="guide-tip"><i class="fas fa-lightbulb"></i> Parçacıklar ne kadar hızlı hareket ederse, rüzgar o kadar kuvvetlidir.</p>
+                </div>
+
+                <div class="guide-section">
+                    <h4><i class="fas fa-water"></i> Dalga Animasyonu</h4>
+                    <p>Dalga animasyonu, deniz yüzeyindeki dalga yüksekliğini renkli katmanlarla gösterir.</p>
+                    <div class="guide-legend">
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #0077b6;"></span>
+                            <span>0-0.5m: Sakin deniz - Tüm tekneler için uygun</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #00b4d8;"></span>
+                            <span>0.5-1m: Hafif dalgalı - Küçük tekneler dikkatli olmalı</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #90e0ef;"></span>
+                            <span>1-2m: Dalgalı - Orta boy tekneler için uygun</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #f4a261;"></span>
+                            <span>2-3m: Çok dalgalı - Büyük tekneler için</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color" style="background: #e63946;"></span>
+                            <span>3m+: Fırtınalı - Denize çıkılmamalı</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="guide-section">
+                    <h4><i class="fas fa-map-marker-alt"></i> Rota Noktaları Risk Seviyeleri</h4>
+                    <p>Rota üzerindeki her nokta, o bölgedeki hava ve deniz durumuna göre renklendirilir:</p>
+                    <div class="guide-legend">
+                        <div class="guide-legend-item">
+                            <span class="guide-color guide-marker" style="background: #2a9d8f;"></span>
+                            <span>Yeşil: Güvenli koşullar</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color guide-marker" style="background: #f4a261;"></span>
+                            <span>Sarı/Turuncu: Dikkat gerektiren koşullar</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color guide-marker" style="background: #e63946;"></span>
+                            <span>Kırmızı: Tehlikeli koşullar</span>
+                        </div>
+                        <div class="guide-legend-item">
+                            <span class="guide-color guide-marker" style="background: #6c757d;"></span>
+                            <span>Gri: Veri alınamadı</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="guide-section">
+                    <h4><i class="fas fa-exclamation-triangle"></i> Önemli Uyarılar</h4>
+                    <ul class="guide-warnings">
+                        <li>Bu veriler Open-Meteo API'den alınmaktadır ve tahmine dayalıdır.</li>
+                        <li>Denize çıkmadan önce mutlaka resmi hava durumu tahminlerini kontrol edin.</li>
+                        <li>Yerel deniz trafik merkezlerinin uyarılarını takip edin.</li>
+                        <li>Teknenizin ve mürettebatınızın kapasitesini aşan koşullarda denize çıkmayın.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="closeGuideFooterBtn" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Anladım
                 </button>
             </div>
         </div>

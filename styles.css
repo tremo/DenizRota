@@ -818,6 +818,106 @@ body {
     justify-content: flex-end;
 }
 
+/* ===== Guide Modal ===== */
+.guide-modal {
+    max-width: 600px;
+}
+
+.guide-section {
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.guide-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.guide-section h4 {
+    color: var(--primary-color);
+    font-size: 1rem;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.guide-section h4 i {
+    color: var(--secondary-color);
+}
+
+.guide-section p {
+    color: var(--gray-700);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.guide-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.guide-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    color: var(--gray-700);
+}
+
+.guide-color {
+    width: 24px;
+    height: 16px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.guide-color.guide-marker {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+}
+
+.guide-tip {
+    background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left: 4px solid var(--warning-color);
+    font-size: 0.85rem !important;
+    color: #856404 !important;
+}
+
+.guide-tip i {
+    color: var(--warning-color);
+    margin-right: 6px;
+}
+
+.guide-warnings {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.guide-warnings li {
+    padding: 10px 12px;
+    background: #fff5f5;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+    color: var(--danger-color);
+    border-left: 3px solid var(--danger-color);
+}
+
+.guide-warnings li:last-child {
+    margin-bottom: 0;
+}
+
 /* ===== Custom Markers ===== */
 .custom-marker {
     position: relative;
