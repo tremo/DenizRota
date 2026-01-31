@@ -12,6 +12,9 @@ This document provides guidance for AI assistants working with the DenizRota cod
 - Wind and wave overlay visualizations
 - Fuel consumption and cost calculations
 - GPS-based trip tracking with history
+- User authentication (Email/Password, Google OAuth)
+- Cloud sync with Firebase Firestore
+- Saved routes management
 - Responsive design for mobile and desktop
 
 ## Technology Stack
@@ -24,16 +27,18 @@ This document provides guidance for AI assistants working with the DenizRota cod
 | Weather APIs | Open-Meteo (Weather + Marine) |
 | Icons | FontAwesome v6.4.0 |
 | Storage | Browser LocalStorage |
+| Backend | Firebase (Auth + Firestore) |
 | GPS | Geolocation API |
 
 ## File Structure
 
 ```
 /DenizRota
-├── index.html      # HTML structure and UI components
-├── app.js          # Complete application logic (~2200 lines)
-├── styles.css      # Styling and responsive design (~1300 lines)
-└── CLAUDE.md       # This file
+├── index.html          # HTML structure and UI components
+├── app.js              # Core application logic (~2800 lines)
+├── firebase-config.js  # Firebase Auth & Firestore integration (~700 lines)
+├── styles.css          # Styling and responsive design (~1750 lines)
+└── CLAUDE.md           # This file
 ```
 
 **Note:** This is a simple, build-free project with no package.json or build tools. All dependencies are loaded from CDN.
@@ -70,8 +75,21 @@ const state = {
 | Wave Overlay | Animated wave visualization |
 | Trip Tracking | GPS tracking and speed monitoring |
 | Trip History | LocalStorage persistence |
+| Saved Routes | Route saving and loading |
 | Settings | Boat configuration management |
 | UI Event Handlers | Button clicks, keyboard shortcuts |
+
+### Firebase Module (in firebase-config.js)
+
+| Section | Description |
+|---------|-------------|
+| Firebase Initialization | App configuration and setup |
+| Authentication | Email/password and Google OAuth |
+| Firestore Settings | Cloud settings sync |
+| Firestore Trips | Cloud trip storage |
+| Firestore Routes | Cloud route storage |
+| Data Migration | LocalStorage to cloud migration |
+| UI Updates | Auth state UI handling |
 
 ## API Endpoints
 
@@ -177,6 +195,9 @@ Code sections are marked with comment delimiters:
 |-----|-------------|
 | `denizRotaSettings` | Boat configuration |
 | `denizRotaTrips` | Trip history (max 50 trips) |
+| `denizRotaRoutes` | Saved routes (max 50 routes) |
+
+**Note:** When Firebase authentication is enabled and a user is logged in, data is stored in Firestore instead of LocalStorage. LocalStorage serves as a fallback for offline use or when not authenticated.
 
 ## Keyboard Shortcuts
 
@@ -263,6 +284,41 @@ Simply open `index.html` in a browser - no build step required.
 | `loadSettings()` | app.js | Load from LocalStorage |
 | `saveSettings()` | app.js | Save to LocalStorage |
 
+## Firebase Integration
+
+The application supports optional Firebase Authentication and Firestore for cloud data storage.
+
+### Firebase Configuration (`firebase-config.js`)
+
+| Function | Purpose |
+|----------|---------|
+| `initializeFirebase()` | Initialize Firebase app |
+| `signUpWithEmail()` | Email/password registration |
+| `signInWithEmail()` | Email/password login |
+| `signInWithGoogle()` | Google OAuth login |
+| `signOut()` | User logout |
+| `saveSettingsToFirestore()` | Cloud settings sync |
+| `saveTripToFirestore()` | Cloud trip storage |
+| `saveRouteToFirestore()` | Cloud route storage |
+| `migrateLocalDataToFirestore()` | Migrate LocalStorage to cloud |
+
+### Global Exports
+
+Firebase functions are exposed via window objects:
+- `window.firebaseAuth` - Authentication methods
+- `window.firebaseDB` - Database operations
+
+### Firestore Data Structure
+
+```
+users/{userId}/
+├── settings: { ... }           # User settings
+├── trips/{tripId}/             # Trip history subcollection
+│   └── { date, distance, ... }
+└── routes/{routeId}/           # Saved routes subcollection
+    └── { name, waypoints, ... }
+```
+
 ## Gotchas and Edge Cases
 
 1. **Marine API is optional** - The app continues if marine data fails
@@ -270,7 +326,9 @@ Simply open `index.html` in a browser - no build step required.
 3. **Fullscreen API** - Uses webkit fallbacks for Safari
 4. **GPS accuracy** - Positions with accuracy > 50m are filtered out
 5. **Trip distance** - Jumps > 1km between positions are ignored (GPS noise)
-6. **LocalStorage limits** - Trip history capped at 50 entries
+6. **LocalStorage limits** - Trip/route history capped at 50 entries
+7. **Firebase is optional** - App works fully offline with LocalStorage when Firebase is not configured
+8. **Data migration** - Users can migrate LocalStorage data to Firestore after signing in
 
 ## Version Information
 
