@@ -53,6 +53,166 @@ const state = {
 const OPEN_METEO_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 
+// ===== Türkiye Kıyı Çizgisi (Basitleştirilmiş) =====
+// Ege ve Akdeniz kıyıları için fetch hesaplamasında kullanılır
+const TURKEY_COASTLINE = [
+    // Kuzey Ege (Çanakkale - İzmir)
+    [26.04, 40.05], [26.19, 40.00], [26.37, 39.96], [26.67, 39.55],
+    [26.76, 39.10], [26.84, 38.75], [26.73, 38.45], [26.43, 38.20],
+    [26.30, 38.08], [26.36, 37.95], [26.58, 37.87], [26.77, 37.65],
+    // Güney Ege (Bodrum - Marmaris)
+    [27.07, 37.50], [27.26, 37.32], [27.35, 37.05], [27.43, 36.98],
+    [27.58, 36.93], [27.85, 36.82], [28.07, 36.77], [28.27, 36.72],
+    // Datça Yarımadası
+    [28.35, 36.72], [28.59, 36.70], [28.75, 36.71], [28.99, 36.76],
+    // Marmaris - Fethiye
+    [28.78, 36.80], [28.95, 36.62], [29.10, 36.63], [29.12, 36.55],
+    [29.03, 36.45], [29.10, 36.32], [29.08, 36.22],
+    // Fethiye - Kaş
+    [29.13, 36.30], [29.40, 36.28], [29.58, 36.22], [29.65, 36.15],
+    [29.80, 36.10], [29.95, 36.08], [30.05, 36.12], [30.18, 36.08],
+    // Kaş - Antalya
+    [30.35, 36.07], [30.55, 36.20], [30.70, 36.35], [30.58, 36.53],
+    [30.55, 36.72], [30.60, 36.85], [30.82, 36.88],
+    // Antalya Körfezi
+    [30.70, 36.83], [30.82, 36.72], [31.00, 36.77], [31.20, 36.68],
+    [31.40, 36.52], [31.80, 36.42], [32.10, 36.35], [32.35, 36.28],
+    // Alanya - Mersin
+    [32.50, 36.32], [32.80, 36.30], [33.10, 36.28], [33.50, 36.22],
+    [33.90, 36.15], [34.20, 36.12], [34.50, 36.15], [34.80, 36.30],
+    // Gökova Körfezi (iç)
+    [28.30, 37.05], [28.10, 37.10], [27.95, 37.12], [27.80, 37.08],
+    [27.60, 37.02], [27.45, 37.00],
+    // Hisarönü Körfezi
+    [28.10, 36.75], [28.05, 36.82], [28.00, 36.88], [27.95, 36.72]
+];
+
+// ===== Fetch (Rüzgar Mesafesi) Hesaplama =====
+/**
+ * Verilen noktadan rüzgar yönüne doğru en yakın kıyıya olan mesafeyi hesaplar
+ * @param {number} lat - Enlem
+ * @param {number} lng - Boylam
+ * @param {number} windDirection - Rüzgar yönü (derece, rüzgarın geldiği yön)
+ * @returns {object} - { fetchKm, isOffshore, coastDirection }
+ */
+function calculateFetch(lat, lng, windDirection) {
+    if (windDirection === null || windDirection === undefined) {
+        return { fetchKm: 999, isOffshore: false, coastDirection: null };
+    }
+
+    // Rüzgarın geldiği yöne doğru ray çiz (rüzgar 180° ise güneyden geliyor, güneye bak)
+    const windFromRad = (windDirection * Math.PI) / 180;
+
+    // Ray başlangıç noktası
+    const startLat = lat;
+    const startLng = lng;
+
+    // Maksimum fetch mesafesi (km)
+    const maxFetchKm = 200;
+
+    // Ray üzerinde adım at ve kıyıya çarpıp çarpmadığını kontrol et
+    const stepKm = 1; // 1 km adımlar
+    const kmToDeg = 1 / 111; // Yaklaşık 1 km = 1/111 derece
+
+    let fetchKm = maxFetchKm;
+    let hitCoast = false;
+
+    for (let dist = stepKm; dist <= maxFetchKm; dist += stepKm) {
+        // Rüzgarın geldiği yöne doğru ilerle
+        const checkLat = startLat + (dist * kmToDeg) * Math.cos(windFromRad);
+        const checkLng = startLng + (dist * kmToDeg) * Math.sin(windFromRad) / Math.cos(startLat * Math.PI / 180);
+
+        // Bu nokta karada mı?
+        if (isPointOnLand(checkLat, checkLng)) {
+            fetchKm = dist;
+            hitCoast = true;
+            break;
+        }
+    }
+
+    // Offshore = rüzgar karadan esiyorsa (fetch < 10km)
+    const isOffshore = hitCoast && fetchKm < 15;
+
+    return {
+        fetchKm: fetchKm,
+        isOffshore: isOffshore,
+        hitCoast: hitCoast
+    };
+}
+
+/**
+ * Basit nokta-kara kontrolü (Türkiye kıyı poligonu içinde mi?)
+ */
+function isPointOnLand(lat, lng) {
+    // Türkiye ana karasının basit sınırları
+    // Ege/Akdeniz kıyı şeridi için yaklaşık kontrol
+
+    // Önce genel Türkiye sınırları içinde mi?
+    if (lat < 35.8 || lat > 42 || lng < 25.5 || lng > 45) {
+        return false; // Türkiye dışı
+    }
+
+    // Deniz alanları (kesinlikle kara değil)
+    // Ege Denizi
+    if (lng < 27 && lat < 40 && lat > 36) return false;
+    // Akdeniz açıkları
+    if (lat < 36 && lng > 27 && lng < 35) return false;
+    // Gökova Körfezi
+    if (lat > 36.7 && lat < 37.15 && lng > 27.4 && lng < 28.5) return false;
+
+    // Kıyı çizgisine yakınlık kontrolü
+    // Eğer kıyı çizgisinin "iç" tarafındaysa kara
+    return isInsideCoastline(lat, lng);
+}
+
+/**
+ * Nokta kıyı çizgisinin kara tarafında mı?
+ */
+function isInsideCoastline(lat, lng) {
+    // Ray casting algoritması - basitleştirilmiş
+    // Noktadan doğuya bir ray çiz, kıyı çizgisini kaç kez kestiğini say
+
+    let intersections = 0;
+    const n = TURKEY_COASTLINE.length;
+
+    for (let i = 0; i < n; i++) {
+        const [lng1, lat1] = TURKEY_COASTLINE[i];
+        const [lng2, lat2] = TURKEY_COASTLINE[(i + 1) % n];
+
+        // Ray (lat, lng) noktasından sağa doğru
+        if ((lat1 > lat) !== (lat2 > lat)) {
+            const intersectLng = lng1 + (lat - lat1) * (lng2 - lng1) / (lat2 - lat1);
+            if (lng < intersectLng) {
+                intersections++;
+            }
+        }
+    }
+
+    // Tek sayıda kesişim = içeride (kara)
+    return intersections % 2 === 1;
+}
+
+/**
+ * Fetch mesafesine göre dalga düzeltme faktörü
+ */
+function getWaveAdjustmentFactor(fetchKm) {
+    if (fetchKm < 3) return 0.1;   // Çok kısa fetch - neredeyse düz
+    if (fetchKm < 5) return 0.2;   // Kısa fetch
+    if (fetchKm < 10) return 0.35; // Orta-kısa fetch
+    if (fetchKm < 20) return 0.5;  // Orta fetch
+    if (fetchKm < 50) return 0.7;  // Uzun fetch
+    return 1.0;                     // Açık deniz
+}
+
+/**
+ * Dalga yüksekliğini fetch'e göre düzelt
+ */
+function adjustWaveForFetch(waveHeight, fetchKm) {
+    if (waveHeight === null) return null;
+    const factor = getWaveAdjustmentFactor(fetchKm);
+    return waveHeight * factor;
+}
+
 async function fetchWeather(lat, lng) {
     const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
 
@@ -1079,12 +1239,37 @@ function createPopupContent(waypoint, number) {
 
     const windyUrl = `https://windy.app/tr/forecast2/spot/${Math.abs(Math.floor(waypoint.lat * 100))}${Math.abs(Math.floor(waypoint.lng * 100))}/Nokta${number}`;
 
+    // Fetch hesaplama - kıyı modu için
+    let fetchInfo = null;
+    let adjustedWave = null;
+    if (hasWeather && waypoint.weather.windDirection !== null) {
+        fetchInfo = calculateFetch(waypoint.lat, waypoint.lng, waypoint.weather.windDirection);
+        if (hasWave) {
+            adjustedWave = adjustWaveForFetch(waypoint.weather.waveHeight, fetchInfo.fetchKm);
+        }
+    }
+
+    // Kıyı durumu etiketi
+    const coastalLabel = fetchInfo ? (
+        fetchInfo.isOffshore
+            ? `<span style="background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
+                 <i class="fas fa-umbrella-beach"></i> Karadan rüzgar
+               </span>`
+            : fetchInfo.fetchKm < 50
+                ? `<span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
+                     <i class="fas fa-water"></i> Kıyı (${Math.round(fetchInfo.fetchKm)} km fetch)
+                   </span>`
+                : `<span style="background: #cce5ff; color: #004085; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
+                     <i class="fas fa-ship"></i> Açık deniz
+                   </span>`
+    ) : '';
+
     const waveContent = hasWave ? `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
             <div style="text-align: center; padding: 8px; background: #e3f2fd; border-radius: 6px;">
                 <i class="fas fa-water" style="color: #0077b6;"></i><br>
-                <strong>${waypoint.weather.waveHeight.toFixed(1)}</strong> m<br>
-                <small style="color: #888;">Dalga</small>
+                <strong>${adjustedWave !== null ? adjustedWave.toFixed(1) : waypoint.weather.waveHeight.toFixed(1)}</strong> m<br>
+                <small style="color: #888;">Tahmini Dalga</small>
             </div>
             <div style="text-align: center; padding: 8px; background: #e3f2fd; border-radius: 6px;">
                 <i class="fas fa-stopwatch" style="color: #0077b6;"></i><br>
@@ -1092,6 +1277,13 @@ function createPopupContent(waypoint, number) {
                 <small style="color: #888;">Periyot</small>
             </div>
         </div>
+        ${adjustedWave !== null && adjustedWave < waypoint.weather.waveHeight * 0.9 ? `
+            <div style="background: #e8f5e9; padding: 6px 8px; border-radius: 4px; margin-bottom: 12px; font-size: 0.75rem; color: #2e7d32;">
+                <i class="fas fa-info-circle"></i>
+                Açık deniz: ${waypoint.weather.waveHeight.toFixed(1)}m → Bu konum: ~${adjustedWave.toFixed(1)}m
+                ${fetchInfo && fetchInfo.isOffshore ? ' (karadan esen rüzgar)' : ''}
+            </div>
+        ` : '<div style="margin-bottom: 4px;"></div>'}
     ` : '';
 
     const weatherContent = hasWeather ? `
@@ -1116,12 +1308,15 @@ function createPopupContent(waypoint, number) {
     `;
 
     return `
-        <div style="padding: 12px; min-width: 200px;">
+        <div style="padding: 12px; min-width: 220px;">
             <div style="background: linear-gradient(135deg, #0077b6, #00b4d8); color: white; margin: -12px -12px 12px -12px; padding: 10px 12px; font-weight: 600;">
                 <i class="fas fa-map-marker-alt"></i> Nokta ${number}
             </div>
-            <div style="font-size: 0.8rem; color: #666; margin-bottom: 8px;">
-                <i class="fas fa-calendar"></i> ${dateStr}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 0.8rem; color: #666;">
+                    <i class="fas fa-calendar"></i> ${dateStr}
+                </span>
+                ${coastalLabel}
             </div>
             ${weatherContent}
             <a href="${windyUrl}" target="_blank" style="
@@ -1378,12 +1573,24 @@ function updateWaypointsList() {
         const hasWeather = wp.weather !== null;
         const windDirection = hasWeather ? getWindDirectionText(wp.weather.windDirection) : '--';
         const hasWave = hasWeather && wp.weather.waveHeight !== null;
-        const waveInfo = hasWave ? `<i class="fas fa-water"></i> ${wp.weather.waveHeight.toFixed(1)}m` : '';
+
+        // Fetch hesaplama
+        let waveDisplay = '';
+        if (hasWave && hasWeather && wp.weather.windDirection !== null) {
+            const fetchInfo = calculateFetch(wp.lat, wp.lng, wp.weather.windDirection);
+            const adjustedWave = adjustWaveForFetch(wp.weather.waveHeight, fetchInfo.fetchKm);
+            const waveText = adjustedWave !== null ? adjustedWave.toFixed(1) : wp.weather.waveHeight.toFixed(1);
+            const offshoreIcon = fetchInfo.isOffshore ? ' <i class="fas fa-umbrella-beach" title="Karadan rüzgar"></i>' : '';
+            waveDisplay = `<i class="fas fa-water"></i> ${waveText}m${offshoreIcon}`;
+        } else if (hasWave) {
+            waveDisplay = `<i class="fas fa-water"></i> ${wp.weather.waveHeight.toFixed(1)}m`;
+        }
+
         const weatherInfo = hasWeather
             ? `<i class="fas fa-wind"></i> ${wp.weather.windSpeed.toFixed(0)} km/s ${windDirection}
                &nbsp;
                <i class="fas fa-thermometer-half"></i> ${wp.weather.temperature.toFixed(0)}°C
-               ${waveInfo ? '&nbsp; ' + waveInfo : ''}`
+               ${waveDisplay ? '&nbsp; ' + waveDisplay : ''}`
             : '<i class="fas fa-exclamation-circle"></i> Veri yok';
 
         return `
