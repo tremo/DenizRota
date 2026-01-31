@@ -21,6 +21,8 @@ const state = {
     weatherCache: new Map(), // API sonuçlarını cache'le
     windGridData: [], // Rüzgar grid verisi
     waveGridData: [], // Dalga grid verisi
+    // Weather auto-refresh
+    weatherRefreshInterval: null,
     // Fullscreen state
     isFullscreen: false,
     // Trip tracking state
@@ -213,8 +215,10 @@ function adjustWaveForFetch(waveHeight, fetchKm) {
     return waveHeight * factor;
 }
 
-async function fetchWeather(lat, lng) {
+async function fetchWeather(lat, lng, retryCount = 0) {
     const cacheKey = `${lat.toFixed(2)}_${lng.toFixed(2)}`;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [2000, 4000, 8000]; // Exponential backoff: 2s, 4s, 8s
 
     // Cache kontrolü (1 saat geçerli)
     if (state.weatherCache.has(cacheKey)) {
@@ -275,6 +279,14 @@ async function fetchWeather(lat, lng) {
         return result;
     } catch (error) {
         console.error('Hava durumu API hatası:', error);
+
+        // Otomatik yeniden deneme (exponential backoff)
+        if (retryCount < MAX_RETRIES) {
+            console.log(`Yeniden deneniyor... (${retryCount + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[retryCount]));
+            return fetchWeather(lat, lng, retryCount + 1);
+        }
+
         return null;
     }
 }
@@ -425,8 +437,28 @@ function isInSea(lat, lng) {
 }
 
 // ===== Wind Particle Animation System =====
-const PARTICLE_COUNT = 3000;
-const PARTICLE_LINE_WIDTH = 1.5;
+// Mobil cihazlar için daha az parçacık kullan
+function getParticleCount() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const screenArea = width * height;
+
+    // Mobil cihazlar (< 768px genişlik veya küçük ekran alanı)
+    if (width < 768 || screenArea < 500000) {
+        return 600; // Mobil için optimize edilmiş
+    }
+    // Tablet boyutu
+    if (width < 1024 || screenArea < 900000) {
+        return 1200;
+    }
+    // Desktop
+    return 3000;
+}
+
+function getParticleLineWidth() {
+    // Mobilde daha ince çizgiler (daha az görsel yoğunluk)
+    return window.innerWidth < 768 ? 1.0 : 1.5;
+}
 
 function getWindColor(speed) {
     // km/s -> knots (1 km/s ≈ 1.944 knots, ama basitlik için 1:1 kullanıyoruz)
@@ -538,7 +570,8 @@ function initWindParticles() {
     const canvas = state.windCanvas;
     if (!canvas) return;
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const particleCount = getParticleCount();
+    for (let i = 0; i < particleCount; i++) {
         state.windParticles.push(createWindParticle(canvas));
     }
 }
@@ -614,10 +647,11 @@ function animateWindParticles() {
                 }
                 ctx.lineTo(particle.x, particle.y);
 
-                // Gradient efekti için alpha değişimi
-                const alpha = color.a * (1 - particle.age / particle.maxAge) * 0.8;
+                // Gradient efekti için alpha değişimi (mobilde daha şeffaf)
+                const mobileOpacity = window.innerWidth < 768 ? 0.6 : 0.8;
+                const alpha = color.a * (1 - particle.age / particle.maxAge) * mobileOpacity;
                 ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
-                ctx.lineWidth = PARTICLE_LINE_WIDTH;
+                ctx.lineWidth = getParticleLineWidth();
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 ctx.stroke();
@@ -1452,6 +1486,102 @@ async function updateAllWeatherData() {
     }
 }
 
+// ===== Weather Auto-Refresh =====
+const WEATHER_REFRESH_INTERVAL = 15 * 60 * 1000; // 15 dakika
+
+function startWeatherAutoRefresh() {
+    // Önceki interval varsa temizle
+    if (state.weatherRefreshInterval) {
+        clearInterval(state.weatherRefreshInterval);
+    }
+
+    // 15 dakikada bir otomatik güncelle
+    state.weatherRefreshInterval = setInterval(() => {
+        // Sadece waypoint varsa ve sayfa görünürse güncelle
+        if (state.waypoints.length > 0 && !document.hidden) {
+            console.log('Hava durumu otomatik güncelleniyor...');
+            refreshWeatherSilently();
+        }
+    }, WEATHER_REFRESH_INTERVAL);
+
+    // Sayfa görünürlük değiştiğinde kontrol et
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && state.waypoints.length > 0) {
+            // Sayfa aktif olduğunda cache'i kontrol et
+            const needsRefresh = state.waypoints.some(wp => {
+                const cacheKey = `${wp.lat.toFixed(2)}_${wp.lng.toFixed(2)}`;
+                const cached = state.weatherCache.get(cacheKey);
+                // Cache 15 dakikadan eski mi?
+                return !cached || (Date.now() - cached.timestamp > WEATHER_REFRESH_INTERVAL);
+            });
+
+            if (needsRefresh) {
+                console.log('Sayfa aktif oldu - eski veriler yenileniyor...');
+                refreshWeatherSilently();
+            }
+        }
+    });
+}
+
+async function refreshWeatherSilently() {
+    // UI'ı bloklamadan sessizce güncelle
+    const departureDate = getDepartureDateTime();
+    const btn = document.getElementById('updateWeatherBtn');
+
+    // Küçük loading göstergesi (buton üzerinde)
+    if (btn) {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+
+    try {
+        // Cache'i temizle (yeni veri çekmek için)
+        state.waypoints.forEach(wp => {
+            const cacheKey = `${wp.lat.toFixed(2)}_${wp.lng.toFixed(2)}`;
+            state.weatherCache.delete(cacheKey);
+        });
+
+        // Tüm waypoint'ler için paralel API çağrıları
+        const weatherPromises = state.waypoints.map(wp =>
+            getWeatherForDateTimeAsync(wp.lat, wp.lng, departureDate)
+        );
+
+        const weatherResults = await Promise.all(weatherPromises);
+
+        // Waypoint'leri güncelle
+        weatherResults.forEach((weather, index) => {
+            if (index < state.waypoints.length) {
+                state.waypoints[index].weather = weather;
+                state.waypoints[index].riskLevel = weather ? calculateRiskLevel(weather) : 'gray';
+
+                // Marker'ı güncelle
+                if (state.markers[index]) {
+                    map.removeLayer(state.markers[index]);
+                    const newMarker = createMarker(state.waypoints[index], index + 1);
+                    state.markers[index] = newMarker;
+                    newMarker.addTo(map);
+                }
+            }
+        });
+
+        // Overlay'leri güncelle
+        if (state.windOverlayVisible) {
+            await loadWindGridData();
+            initWindParticles();
+        }
+        if (state.waveOverlayVisible) {
+            await loadWaveGridData();
+        }
+
+        updateWaypointsList();
+        updateRouteStats();
+
+    } finally {
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        }
+    }
+}
+
 // ===== Calculations =====
 function calculateDistance(lat1, lng1, lat2, lng2) {
     const R = 6371;
@@ -1732,6 +1862,9 @@ function init() {
     // Date/time change
     document.getElementById('departureDate').addEventListener('change', updateAllWeatherData);
     document.getElementById('departureTime').addEventListener('change', updateAllWeatherData);
+
+    // Otomatik hava durumu yenileme başlat (15 dakikada bir)
+    startWeatherAutoRefresh();
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
