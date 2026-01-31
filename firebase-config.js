@@ -10,14 +10,14 @@
  * 5. Aşağıdaki firebaseConfig değerlerini kendi projenizinkilerle değiştirin
  */
 
-// Firebase yapılandırması - KENDİ DEĞERLERİNİZLE DEĞİŞTİRİN
+// Firebase yapılandırması
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyDm3v5OZhF5Y9UtsYZCG9-YuUPZcO3_0Vc",
+    authDomain: "denizrota-d40d1.firebaseapp.com",
+    projectId: "denizrota-d40d1",
+    storageBucket: "denizrota-d40d1.firebasestorage.app",
+    messagingSenderId: "317659078558",
+    appId: "1:317659078558:web:452891336d6b59d09f008f"
 };
 
 // Firebase başlatma durumu
