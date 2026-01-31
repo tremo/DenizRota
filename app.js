@@ -1361,6 +1361,9 @@ function updateWaypointsList() {
 
     countBadge.textContent = state.waypoints.length;
 
+    // Rotayı Kaydet butonu görünürlüğünü güncelle
+    updateSaveRouteButtonVisibility();
+
     if (state.waypoints.length === 0) {
         container.innerHTML = `
             <p class="empty-message">
@@ -1435,7 +1438,13 @@ function saveSettings() {
         fuelPrice: parseFloat(document.getElementById('fuelPrice').value) || 45
     };
 
-    localStorage.setItem('denizRotaSettings', JSON.stringify(state.settings));
+    // Firebase veya LocalStorage'a kaydet
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        firebaseDB.saveSettings(state.settings);
+    } else {
+        localStorage.setItem('denizRotaSettings', JSON.stringify(state.settings));
+    }
+
     updateRouteStats();
     closeSettings();
 }
@@ -1455,6 +1464,9 @@ function loadSettings() {
 function init() {
     initMap();
     loadSettings();
+
+    // Firebase başlat
+    initializeFirebaseAuth();
 
     // Default date/time
     const now = new Date();
@@ -1486,6 +1498,12 @@ function init() {
     document.getElementById('closeTripHistoryBtn').addEventListener('click', closeTripHistory);
     document.getElementById('clearTripHistoryBtn').addEventListener('click', clearTripHistory);
 
+    // Auth event listeners
+    setupAuthEventListeners();
+
+    // Route save event listeners
+    setupRouteSaveEventListeners();
+
     // Modal overlay clicks
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', function() {
@@ -1500,7 +1518,11 @@ function init() {
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (!document.getElementById('tripSummaryModal').classList.contains('hidden')) {
+            if (!document.getElementById('authModal').classList.contains('hidden')) {
+                closeAuthModal();
+            } else if (!document.getElementById('saveRouteModal').classList.contains('hidden')) {
+                closeSaveRouteModal();
+            } else if (!document.getElementById('tripSummaryModal').classList.contains('hidden')) {
                 closeTripSummary();
             } else if (!document.getElementById('tripHistoryModal').classList.contains('hidden')) {
                 closeTripHistory();
@@ -1514,7 +1536,7 @@ function init() {
                 toggleRouteMode();
             }
         }
-        if (document.activeElement.tagName !== 'INPUT') {
+        if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
             if (e.key === 'r' && !e.ctrlKey && !e.metaKey) {
                 toggleRouteMode();
             }
@@ -1530,7 +1552,309 @@ function init() {
     // Sidebar yolculuk listesini yükle
     updateSidebarTripsList();
 
-    console.log('DenizRota v2.0 başlatıldı! 🚤');
+    // Kayıtlı rotaları yükle
+    updateSavedRoutesList();
+
+    console.log('DenizRota v2.1 başlatıldı! 🚤');
+}
+
+// ===== Firebase Auth Integration =====
+function initializeFirebaseAuth() {
+    if (typeof firebaseAuth !== 'undefined' && firebaseAuth.initialize) {
+        const initialized = firebaseAuth.initialize();
+        if (!initialized) {
+            console.log('Firebase yapılandırılmamış - çevrimdışı mod');
+        }
+    }
+}
+
+function setupAuthEventListeners() {
+    // Login button
+    const loginBtn = document.getElementById('loginBtn');
+    if (loginBtn) {
+        loginBtn.addEventListener('click', openAuthModal);
+    }
+
+    // Close auth modal
+    const closeAuthBtn = document.getElementById('closeAuthBtn');
+    if (closeAuthBtn) {
+        closeAuthBtn.addEventListener('click', closeAuthModal);
+    }
+
+    // User menu dropdown
+    const userMenuBtn = document.getElementById('userMenuBtn');
+    if (userMenuBtn) {
+        userMenuBtn.addEventListener('click', toggleUserDropdown);
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+        const userInfo = document.getElementById('userInfo');
+        const dropdown = document.getElementById('userDropdown');
+        if (userInfo && dropdown && !userInfo.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    // Logout button
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    // Sync data button
+    const syncDataBtn = document.getElementById('syncDataBtn');
+    if (syncDataBtn) {
+        syncDataBtn.addEventListener('click', handleSyncData);
+    }
+
+    // Login form submit
+    const loginSubmitBtn = document.getElementById('loginSubmitBtn');
+    if (loginSubmitBtn) {
+        loginSubmitBtn.addEventListener('click', handleEmailLogin);
+    }
+
+    // Google login
+    const googleLoginBtn = document.getElementById('googleLoginBtn');
+    if (googleLoginBtn) {
+        googleLoginBtn.addEventListener('click', handleGoogleLogin);
+    }
+
+    // Register form submit
+    const registerSubmitBtn = document.getElementById('registerSubmitBtn');
+    if (registerSubmitBtn) {
+        registerSubmitBtn.addEventListener('click', handleRegister);
+    }
+
+    // Forgot password submit
+    const forgotSubmitBtn = document.getElementById('forgotSubmitBtn');
+    if (forgotSubmitBtn) {
+        forgotSubmitBtn.addEventListener('click', handleForgotPassword);
+    }
+
+    // Form navigation links
+    const showRegister = document.getElementById('showRegister');
+    if (showRegister) {
+        showRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAuthForm('register');
+        });
+    }
+
+    const showLogin = document.getElementById('showLogin');
+    if (showLogin) {
+        showLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAuthForm('login');
+        });
+    }
+
+    const showForgotPassword = document.getElementById('showForgotPassword');
+    if (showForgotPassword) {
+        showForgotPassword.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAuthForm('forgot');
+        });
+    }
+
+    const backToLogin = document.getElementById('backToLogin');
+    if (backToLogin) {
+        backToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAuthForm('login');
+        });
+    }
+
+    // Enter key for form submit
+    document.querySelectorAll('#loginEmail, #loginPassword').forEach(input => {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleEmailLogin();
+        });
+    });
+
+    document.querySelectorAll('#registerName, #registerEmail, #registerPassword, #registerPasswordConfirm').forEach(input => {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleRegister();
+        });
+    });
+}
+
+function openAuthModal() {
+    const modal = document.getElementById('authModal');
+    const firebaseWarning = document.getElementById('firebaseWarning');
+
+    // Firebase yapılandırılmamışsa uyarı göster
+    if (typeof firebaseAuth !== 'undefined' && !firebaseAuth.isConfigured()) {
+        if (firebaseWarning) firebaseWarning.classList.remove('hidden');
+        document.getElementById('loginForm').classList.add('hidden');
+    } else {
+        if (firebaseWarning) firebaseWarning.classList.add('hidden');
+        showAuthForm('login');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeAuthModal() {
+    document.getElementById('authModal').classList.add('hidden');
+    // Form alanlarını temizle
+    document.querySelectorAll('#authModal input').forEach(input => input.value = '');
+    document.querySelectorAll('.auth-message').forEach(msg => msg.classList.add('hidden'));
+}
+
+function showAuthForm(formType) {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+    const modalTitle = document.getElementById('authModalTitle');
+
+    loginForm.classList.add('hidden');
+    registerForm.classList.add('hidden');
+    forgotPasswordForm.classList.add('hidden');
+
+    if (formType === 'login') {
+        loginForm.classList.remove('hidden');
+        modalTitle.innerHTML = '<i class="fas fa-user-circle"></i> Giriş Yap';
+    } else if (formType === 'register') {
+        registerForm.classList.remove('hidden');
+        modalTitle.innerHTML = '<i class="fas fa-user-plus"></i> Kayıt Ol';
+    } else if (formType === 'forgot') {
+        forgotPasswordForm.classList.remove('hidden');
+        modalTitle.innerHTML = '<i class="fas fa-key"></i> Şifremi Unuttum';
+    }
+}
+
+function toggleUserDropdown() {
+    const dropdown = document.getElementById('userDropdown');
+    dropdown.classList.toggle('hidden');
+}
+
+async function handleEmailLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const btn = document.getElementById('loginSubmitBtn');
+
+    if (!email || !password) {
+        showAuthErrorMessage('Email ve şifre gerekli');
+        return;
+    }
+
+    btn.classList.add('loading');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Giriş yapılıyor...';
+
+    try {
+        const user = await firebaseAuth.signInWithEmail(email, password);
+        if (user) {
+            closeAuthModal();
+        }
+    } finally {
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Giriş Yap';
+    }
+}
+
+async function handleGoogleLogin() {
+    const btn = document.getElementById('googleLoginBtn');
+
+    btn.classList.add('loading');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Bağlanıyor...';
+
+    try {
+        const user = await firebaseAuth.signInWithGoogle();
+        if (user) {
+            closeAuthModal();
+        }
+    } finally {
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="fab fa-google"></i> Google ile Giriş Yap';
+    }
+}
+
+async function handleRegister() {
+    const name = document.getElementById('registerName').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    const passwordConfirm = document.getElementById('registerPasswordConfirm').value;
+    const btn = document.getElementById('registerSubmitBtn');
+
+    if (!email || !password) {
+        showAuthErrorMessage('Email ve şifre gerekli');
+        return;
+    }
+
+    if (password !== passwordConfirm) {
+        showAuthErrorMessage('Şifreler eşleşmiyor');
+        return;
+    }
+
+    if (password.length < 6) {
+        showAuthErrorMessage('Şifre en az 6 karakter olmalı');
+        return;
+    }
+
+    btn.classList.add('loading');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Kaydediliyor...';
+
+    try {
+        const user = await firebaseAuth.signUpWithEmail(email, password, name);
+        if (user) {
+            closeAuthModal();
+        }
+    } finally {
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="fas fa-user-plus"></i> Kayıt Ol';
+    }
+}
+
+async function handleForgotPassword() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    const btn = document.getElementById('forgotSubmitBtn');
+
+    if (!email) {
+        showAuthErrorMessage('Email adresi gerekli');
+        return;
+    }
+
+    btn.classList.add('loading');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gönderiliyor...';
+
+    try {
+        await firebaseAuth.sendPasswordReset(email);
+        showAuthForm('login');
+    } finally {
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="fas fa-envelope"></i> Sıfırlama Linki Gönder';
+    }
+}
+
+async function handleLogout() {
+    const dropdown = document.getElementById('userDropdown');
+    dropdown.classList.add('hidden');
+
+    if (typeof firebaseAuth !== 'undefined') {
+        await firebaseAuth.signOut();
+    }
+}
+
+async function handleSyncData() {
+    const dropdown = document.getElementById('userDropdown');
+    dropdown.classList.add('hidden');
+
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth.isLoggedIn()) {
+        await firebaseDB.migrateLocalData();
+        // Listeleri güncelle
+        updateSidebarTripsList();
+        updateSavedRoutesList();
+    }
+}
+
+function showAuthErrorMessage(message) {
+    const errorEl = document.getElementById('authError');
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.classList.remove('hidden');
+        setTimeout(() => errorEl.classList.add('hidden'), 5000);
+    }
 }
 
 // Kullanıcı konumunu göster (sayfa açıldığında)
@@ -1926,22 +2250,29 @@ function closeTripSummary() {
     document.getElementById('tripSummaryModal').classList.add('hidden');
 }
 
-function saveCurrentTrip() {
+async function saveCurrentTrip() {
     if (!state.currentTrip) return;
 
-    // Local storage'dan mevcut kayıtları al
-    let trips = getTripHistory();
+    // Firebase veya LocalStorage'a kaydet
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        await firebaseDB.saveTrip(state.currentTrip);
+        // Firestore'dan yeniden yükle
+        await firebaseDB.loadTrips();
+    } else {
+        // Local storage'dan mevcut kayıtları al
+        let trips = getTripHistory();
 
-    // Yeni trip'i ekle
-    trips.unshift(state.currentTrip);
+        // Yeni trip'i ekle
+        trips.unshift(state.currentTrip);
 
-    // Maksimum 50 kayıt tut
-    if (trips.length > 50) {
-        trips = trips.slice(0, 50);
+        // Maksimum 50 kayıt tut
+        if (trips.length > 50) {
+            trips = trips.slice(0, 50);
+        }
+
+        // Kaydet
+        localStorage.setItem('denizRotaTrips', JSON.stringify(trips));
     }
-
-    // Kaydet
-    localStorage.setItem('denizRotaTrips', JSON.stringify(trips));
 
     // Modal'ı kapat
     closeTripSummary();
@@ -1954,6 +2285,11 @@ function saveCurrentTrip() {
 }
 
 function getTripHistory() {
+    // Firebase'den veya LocalStorage'dan al
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        return firebaseDB.getTrips();
+    }
+
     try {
         const saved = localStorage.getItem('denizRotaTrips');
         return saved ? JSON.parse(saved) : [];
@@ -2016,9 +2352,16 @@ function closeTripHistory() {
     document.getElementById('tripHistoryModal').classList.add('hidden');
 }
 
-function clearTripHistory() {
+async function clearTripHistory() {
     if (confirm('Tüm yolculuk geçmişini silmek istediğinize emin misiniz?')) {
-        localStorage.removeItem('denizRotaTrips');
+        // Firebase veya LocalStorage'dan sil
+        if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+            await firebaseDB.clearTrips();
+            await firebaseDB.loadTrips();
+        } else {
+            localStorage.removeItem('denizRotaTrips');
+        }
+
         showTripHistory(); // Modal listeyi yenile
         updateSidebarTripsList(); // Sidebar listeyi yenile
     }
@@ -2175,12 +2518,23 @@ function clearDisplayedTrip() {
     }
 }
 
-function deleteTrip(index) {
+async function deleteTrip(index) {
     if (!confirm('Bu yolculuğu silmek istediğinize emin misiniz?')) return;
 
     let trips = getTripHistory();
-    trips.splice(index, 1);
-    localStorage.setItem('denizRotaTrips', JSON.stringify(trips));
+    const tripToDelete = trips[index];
+
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        // Firestore'dan sil
+        if (tripToDelete && tripToDelete.id) {
+            await firebaseDB.deleteTrip(tripToDelete.id);
+            await firebaseDB.loadTrips();
+        }
+    } else {
+        // LocalStorage'dan sil
+        trips.splice(index, 1);
+        localStorage.setItem('denizRotaTrips', JSON.stringify(trips));
+    }
 
     updateSidebarTripsList();
     showTripHistory(); // Modal açıksa onu da güncelle
@@ -2190,3 +2544,216 @@ function deleteTrip(index) {
 window.showTripOnMap = showTripOnMap;
 window.clearDisplayedTrip = clearDisplayedTrip;
 window.deleteTrip = deleteTrip;
+
+// ===== Route Save/Load System =====
+function setupRouteSaveEventListeners() {
+    // Save route button
+    const saveRouteBtn = document.getElementById('saveRouteBtn');
+    if (saveRouteBtn) {
+        saveRouteBtn.addEventListener('click', openSaveRouteModal);
+    }
+
+    // Close save route modal
+    const closeSaveRouteBtn = document.getElementById('closeSaveRouteBtn');
+    if (closeSaveRouteBtn) {
+        closeSaveRouteBtn.addEventListener('click', closeSaveRouteModal);
+    }
+
+    // Cancel save route
+    const cancelSaveRouteBtn = document.getElementById('cancelSaveRouteBtn');
+    if (cancelSaveRouteBtn) {
+        cancelSaveRouteBtn.addEventListener('click', closeSaveRouteModal);
+    }
+
+    // Confirm save route
+    const confirmSaveRouteBtn = document.getElementById('confirmSaveRouteBtn');
+    if (confirmSaveRouteBtn) {
+        confirmSaveRouteBtn.addEventListener('click', confirmSaveRoute);
+    }
+}
+
+function openSaveRouteModal() {
+    if (state.waypoints.length < 2) {
+        alert('Kaydetmek için en az 2 rota noktası gerekli');
+        return;
+    }
+
+    const modal = document.getElementById('saveRouteModal');
+    document.getElementById('routeName').value = '';
+    document.getElementById('routeDescription').value = '';
+    modal.classList.remove('hidden');
+
+    // Focus on name input
+    setTimeout(() => document.getElementById('routeName').focus(), 100);
+}
+
+function closeSaveRouteModal() {
+    document.getElementById('saveRouteModal').classList.add('hidden');
+}
+
+async function confirmSaveRoute() {
+    const name = document.getElementById('routeName').value.trim();
+    const description = document.getElementById('routeDescription').value.trim();
+
+    if (!name) {
+        alert('Rota adı gerekli');
+        return;
+    }
+
+    const route = {
+        id: Date.now().toString(),
+        name: name,
+        description: description,
+        waypoints: state.waypoints.map(wp => ({
+            lat: wp.lat,
+            lng: wp.lng
+        })),
+        totalDistance: getTotalDistance(),
+        waypointCount: state.waypoints.length,
+        createdAt: new Date().toISOString()
+    };
+
+    // Firebase veya LocalStorage'a kaydet
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        await firebaseDB.saveRoute(route);
+    } else {
+        let routes = JSON.parse(localStorage.getItem('denizRotaRoutes') || '[]');
+        routes.unshift(route);
+        if (routes.length > 50) routes = routes.slice(0, 50);
+        localStorage.setItem('denizRotaRoutes', JSON.stringify(routes));
+    }
+
+    closeSaveRouteModal();
+    updateSavedRoutesList();
+
+    console.log('Rota kaydedildi:', route.name);
+}
+
+function getSavedRoutes() {
+    // Firebase'den veya LocalStorage'dan al
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        return firebaseDB.getRoutes();
+    }
+    return JSON.parse(localStorage.getItem('denizRotaRoutes') || '[]');
+}
+
+function updateSavedRoutesList() {
+    const container = document.getElementById('savedRoutesList');
+    const countBadge = document.getElementById('savedRouteCount');
+    const routes = getSavedRoutes();
+
+    if (!container || !countBadge) return;
+
+    countBadge.textContent = routes.length;
+
+    if (routes.length === 0) {
+        container.innerHTML = `
+            <p class="empty-message">
+                <i class="fas fa-cloud"></i>
+                Kayıtlı rota yok
+            </p>
+        `;
+        return;
+    }
+
+    container.innerHTML = routes.slice(0, 5).map((route, index) => {
+        const date = route.createdAt ? new Date(route.createdAt) : new Date();
+        const dateStr = date.toLocaleDateString('tr-TR', {
+            day: 'numeric',
+            month: 'short'
+        });
+
+        return `
+            <div class="route-item" onclick="loadSavedRoute('${route.id}')">
+                <div class="route-item-header">
+                    <span class="route-item-name" title="${route.name}">${route.name}</span>
+                    <div class="route-item-actions">
+                        <button class="route-item-btn" onclick="event.stopPropagation(); loadSavedRoute('${route.id}')" title="Yükle">
+                            <i class="fas fa-upload"></i>
+                        </button>
+                        <button class="route-item-btn delete" onclick="event.stopPropagation(); deleteSavedRoute('${route.id}')" title="Sil">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="route-item-meta">
+                    <span><i class="fas fa-map-marker-alt"></i> ${route.waypointCount || route.waypoints?.length || 0} nokta</span>
+                    <span><i class="fas fa-ruler"></i> ${(route.totalDistance || 0).toFixed(1)} km</span>
+                    <span><i class="fas fa-calendar"></i> ${dateStr}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // 5'ten fazla varsa "Tümünü Gör" butonu ekle
+    if (routes.length > 5) {
+        container.innerHTML += `
+            <button class="btn btn-sm btn-secondary" style="width:100%; margin-top:8px;" onclick="showAllSavedRoutes()">
+                <i class="fas fa-list"></i> Tümünü Gör (${routes.length})
+            </button>
+        `;
+    }
+}
+
+async function loadSavedRoute(routeId) {
+    const routes = getSavedRoutes();
+    const route = routes.find(r => r.id === routeId || r.id.toString() === routeId);
+
+    if (!route || !route.waypoints) {
+        alert('Rota bulunamadı');
+        return;
+    }
+
+    // Mevcut rotayı temizle
+    clearRoute();
+
+    // Yeni rotayı yükle
+    for (const wp of route.waypoints) {
+        await addWaypoint(wp.lat, wp.lng);
+    }
+
+    // Haritayı rotaya sığdır
+    if (state.polyline) {
+        map.fitBounds(state.polyline.getBounds(), { padding: [50, 50] });
+    }
+
+    console.log('Rota yüklendi:', route.name);
+}
+
+async function deleteSavedRoute(routeId) {
+    if (!confirm('Bu rotayı silmek istediğinize emin misiniz?')) return;
+
+    if (typeof firebaseDB !== 'undefined' && firebaseAuth && firebaseAuth.isLoggedIn()) {
+        await firebaseDB.deleteRoute(routeId);
+        // Firestore'dan tekrar yükle
+        await firebaseDB.loadRoutes();
+    } else {
+        let routes = JSON.parse(localStorage.getItem('denizRotaRoutes') || '[]');
+        routes = routes.filter(r => r.id !== routeId && r.id.toString() !== routeId);
+        localStorage.setItem('denizRotaRoutes', JSON.stringify(routes));
+    }
+
+    updateSavedRoutesList();
+}
+
+function showAllSavedRoutes() {
+    // TODO: Modal ile tüm rotaları göster
+    alert('Tüm rotalar: ' + getSavedRoutes().length);
+}
+
+// Waypoint sayısı değiştiğinde "Rotayı Kaydet" butonunu göster/gizle
+function updateSaveRouteButtonVisibility() {
+    const saveBtn = document.getElementById('saveRouteBtn');
+    if (saveBtn) {
+        if (state.waypoints.length >= 2) {
+            saveBtn.classList.remove('hidden');
+        } else {
+            saveBtn.classList.add('hidden');
+        }
+    }
+}
+
+// Global fonksiyonlar
+window.loadSavedRoute = loadSavedRoute;
+window.deleteSavedRoute = deleteSavedRoute;
+window.showAllSavedRoutes = showAllSavedRoutes;
