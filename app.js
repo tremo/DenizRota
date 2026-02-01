@@ -167,7 +167,7 @@ function calculateFetch(lat, lng, windDirection) {
         }
     }
 
-    // Offshore = rüzgar karadan esiyorsa (kısa fetch)
+    // Korunaklı = rüzgar yönünde yakın kıyı/ada varsa (kısa fetch, küçük dalga)
     const isOffshore = foundCoast && minFetch < 15;
 
     return {
@@ -1272,7 +1272,7 @@ function createPopupContent(waypoint, number) {
     const coastalLabel = fetchInfo ? (
         fetchInfo.isOffshore
             ? `<span style="background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
-                 <i class="fas fa-umbrella-beach"></i> Karadan rüzgar
+                 <i class="fas fa-shield-alt"></i> Korunaklı (~${fetchInfo.fetchKm}km)
                </span>`
             : fetchInfo.fetchKm < 50
                 ? `<span style="background: #fff3cd; color: #856404; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">
@@ -1300,7 +1300,7 @@ function createPopupContent(waypoint, number) {
             <div style="background: #e8f5e9; padding: 6px 8px; border-radius: 4px; margin-bottom: 12px; font-size: 0.75rem; color: #2e7d32;">
                 <i class="fas fa-info-circle"></i>
                 Açık deniz: ${waypoint.weather.waveHeight.toFixed(1)}m → Bu konum: ~${adjustedWave.toFixed(1)}m
-                ${fetchInfo && fetchInfo.isOffshore ? ' (karadan esen rüzgar)' : ''}
+                ${fetchInfo && fetchInfo.isOffshore ? ` (kısa fetch: ~${fetchInfo.fetchKm}km)` : ''}
             </div>
         ` : '<div style="margin-bottom: 4px;"></div>'}
     ` : '';
@@ -1695,7 +1695,7 @@ function updateWaypointsList() {
             const fetchInfo = calculateFetch(wp.lat, wp.lng, wp.weather.windDirection);
             const adjustedWave = adjustWaveForFetch(wp.weather.waveHeight, fetchInfo.fetchKm);
             const waveText = adjustedWave !== null ? adjustedWave.toFixed(1) : wp.weather.waveHeight.toFixed(1);
-            const offshoreIcon = fetchInfo.isOffshore ? ' <i class="fas fa-umbrella-beach" title="Karadan rüzgar"></i>' : '';
+            const offshoreIcon = fetchInfo.isOffshore ? ` <i class="fas fa-shield-alt" title="Korunaklı alan (~${fetchInfo.fetchKm}km fetch)"></i>` : '';
             waveDisplay = `<i class="fas fa-water"></i> ${waveText}m${offshoreIcon}`;
         } else if (hasWave) {
             waveDisplay = `<i class="fas fa-water"></i> ${wp.weather.waveHeight.toFixed(1)}m`;
