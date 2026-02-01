@@ -47,7 +47,8 @@ const state = {
         avgSpeed: 20,
         fuelRate: 15,
         tankCapacity: 200,
-        fuelPrice: 45
+        fuelPrice: 45,
+        showNotifications: false
     }
 };
 
@@ -1078,7 +1079,9 @@ function toggleRouteMode() {
 
     if (state.routeMode) {
         btn.classList.add('active');
-        instructions.classList.remove('hidden');
+        if (state.settings.showNotifications) {
+            instructions.classList.remove('hidden');
+        }
         closeWeatherPanel();
         // Marker'ları sürüklenebilir yap
         state.markers.forEach(marker => marker.dragging.enable());
@@ -1772,6 +1775,7 @@ function loadSettingsToForm() {
     document.getElementById('fuelRate').value = state.settings.fuelRate;
     document.getElementById('tankCapacity').value = state.settings.tankCapacity;
     document.getElementById('fuelPrice').value = state.settings.fuelPrice;
+    document.getElementById('showNotifications').checked = state.settings.showNotifications;
 }
 
 function saveSettings() {
@@ -1781,7 +1785,8 @@ function saveSettings() {
         avgSpeed: parseFloat(document.getElementById('avgSpeed').value) || 20,
         fuelRate: parseFloat(document.getElementById('fuelRate').value) || 15,
         tankCapacity: parseFloat(document.getElementById('tankCapacity').value) || 200,
-        fuelPrice: parseFloat(document.getElementById('fuelPrice').value) || 45
+        fuelPrice: parseFloat(document.getElementById('fuelPrice').value) || 45,
+        showNotifications: document.getElementById('showNotifications').checked
     };
 
     // Firebase veya LocalStorage'a kaydet
