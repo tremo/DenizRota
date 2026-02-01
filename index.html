@@ -6,7 +6,7 @@
     <title>DenizRota - Tekne Rota Planlayıcı</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="styles.css?v=2.3" />
+    <link rel="stylesheet" href="styles.css?v=2.4" />
 </head>
 <body>
     <!-- Header -->
@@ -363,6 +363,19 @@
                         <div class="input-group">
                             <label for="fuelPrice">Yakıt Fiyatı (₺/lt)</label>
                             <input type="number" id="fuelPrice" value="45" min="1" max="500" step="0.5" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-group">
+                    <h4>Genel Ayarlar</h4>
+                    <div class="input-row">
+                        <div class="input-group checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showNotifications" />
+                                <span>Harita bildirimlerini göster</span>
+                            </label>
+                            <small class="input-hint">Rota modu açıldığında ekranda bilgilendirme mesajı gösterilir</small>
                         </div>
                     </div>
                 </div>
@@ -727,6 +740,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js?v=1.0"></script>
 
-    <script src="app.js?v=2.5"></script>
+    <script src="app.js?v=2.6"></script>
 </body>
 </html>
