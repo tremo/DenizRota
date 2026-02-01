@@ -153,14 +153,14 @@ function calculateFetch(lat, lng, windDirection) {
         // Dot product ile kontrol - pozitifse aynı yönde
         const dotProduct = dLng * windDirX + dLat * windDirY;
 
-        // Açı kontrolü - ±60 derece içinde olmalı
+        // Açı kontrolü - ±45 derece içinde olmalı (daha hassas fetch hesabı)
         if (dotProduct > 0) {
             const coastAngle = Math.atan2(dLng, dLat);
             const angleDiff = Math.abs(windFromRad - coastAngle);
             const normalizedDiff = Math.min(angleDiff, 2 * Math.PI - angleDiff);
 
-            // ±60 derece (1.05 radyan) içindeyse fetch'e dahil et
-            if (normalizedDiff < 1.05 && distance < minFetch) {
+            // ±45 derece (0.785 radyan) içindeyse fetch'e dahil et
+            if (normalizedDiff < 0.785 && distance < minFetch) {
                 minFetch = distance;
                 foundCoast = true;
             }
