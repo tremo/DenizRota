@@ -55,141 +55,123 @@ const OPEN_METEO_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 
 // ===== Türkiye Kıyı Çizgisi (Basitleştirilmiş) =====
 // Ege ve Akdeniz kıyıları için fetch hesaplamasında kullanılır
-const TURKEY_COASTLINE = [
-    // Kuzey Ege (Çanakkale - İzmir)
-    [26.04, 40.05], [26.19, 40.00], [26.37, 39.96], [26.67, 39.55],
-    [26.76, 39.10], [26.84, 38.75], [26.73, 38.45], [26.43, 38.20],
-    [26.30, 38.08], [26.36, 37.95], [26.58, 37.87], [26.77, 37.65],
-    // Güney Ege (Bodrum - Marmaris)
-    [27.07, 37.50], [27.26, 37.32], [27.35, 37.05], [27.43, 36.98],
-    [27.58, 36.93], [27.85, 36.82], [28.07, 36.77], [28.27, 36.72],
-    // Datça Yarımadası
-    [28.35, 36.72], [28.59, 36.70], [28.75, 36.71], [28.99, 36.76],
-    // Marmaris - Fethiye
-    [28.78, 36.80], [28.95, 36.62], [29.10, 36.63], [29.12, 36.55],
-    [29.03, 36.45], [29.10, 36.32], [29.08, 36.22],
-    // Fethiye - Kaş
-    [29.13, 36.30], [29.40, 36.28], [29.58, 36.22], [29.65, 36.15],
-    [29.80, 36.10], [29.95, 36.08], [30.05, 36.12], [30.18, 36.08],
-    // Kaş - Antalya
-    [30.35, 36.07], [30.55, 36.20], [30.70, 36.35], [30.58, 36.53],
-    [30.55, 36.72], [30.60, 36.85], [30.82, 36.88],
-    // Antalya Körfezi
-    [30.70, 36.83], [30.82, 36.72], [31.00, 36.77], [31.20, 36.68],
-    [31.40, 36.52], [31.80, 36.42], [32.10, 36.35], [32.35, 36.28],
-    // Alanya - Mersin
-    [32.50, 36.32], [32.80, 36.30], [33.10, 36.28], [33.50, 36.22],
-    [33.90, 36.15], [34.20, 36.12], [34.50, 36.15], [34.80, 36.30],
-    // Gökova Körfezi (iç)
-    [28.30, 37.05], [28.10, 37.10], [27.95, 37.12], [27.80, 37.08],
-    [27.60, 37.02], [27.45, 37.00],
-    // Hisarönü Körfezi
-    [28.10, 36.75], [28.05, 36.82], [28.00, 36.88], [27.95, 36.72]
+// Format: [lng, lat] - her nokta bir kıyı noktası
+
+const COASTLINE_POINTS = [
+    // Datça Yarımadası - Kuzey Kıyı (Hisarönü/Gökova tarafı)
+    [27.70, 36.75], [27.75, 36.76], [27.80, 36.77], [27.85, 36.78],
+    [27.90, 36.78], [27.95, 36.77], [28.00, 36.76], [28.05, 36.75],
+    [28.10, 36.74], [28.15, 36.73], [28.20, 36.72], [28.25, 36.72],
+    [28.30, 36.71], [28.35, 36.71], [28.40, 36.71], [28.45, 36.71],
+    [28.50, 36.72], [28.55, 36.72], [28.60, 36.73], [28.65, 36.74],
+    [28.70, 36.75], [28.75, 36.76],
+
+    // Datça Yarımadası - Güney Kıyı (Akdeniz tarafı)
+    [27.70, 36.70], [27.75, 36.69], [27.80, 36.68], [27.85, 36.68],
+    [27.90, 36.67], [27.95, 36.67], [28.00, 36.67], [28.05, 36.67],
+    [28.10, 36.68], [28.15, 36.68], [28.20, 36.69], [28.25, 36.69],
+    [28.30, 36.69], [28.35, 36.69], [28.40, 36.70], [28.45, 36.70],
+    [28.50, 36.70], [28.55, 36.70], [28.60, 36.71],
+
+    // Datça Yarımadası Ucu (Knidos)
+    [28.70, 36.69], [28.72, 36.68], [28.75, 36.68],
+
+    // Bozburun Yarımadası
+    [28.00, 36.65], [28.05, 36.62], [28.10, 36.60], [28.15, 36.58],
+    [28.20, 36.60], [28.25, 36.62], [28.30, 36.65],
+
+    // Marmaris - Bozburun arası
+    [28.30, 36.78], [28.35, 36.80], [28.40, 36.82], [28.45, 36.84],
+    [28.50, 36.85], [28.55, 36.84], [28.60, 36.82], [28.65, 36.80],
+
+    // Symi Adası (Yunanistan) - Fetch hesabı için önemli
+    [27.80, 36.60], [27.82, 36.58], [27.85, 36.56], [27.87, 36.55],
+    [27.88, 36.58], [27.86, 36.61], [27.83, 36.62],
+
+    // Kos Adası (kuzey kıyısı)
+    [27.00, 36.85], [27.05, 36.87], [27.10, 36.88], [27.15, 36.88],
+    [27.20, 36.87], [27.25, 36.86],
+
+    // Bodrum Yarımadası
+    [27.20, 37.05], [27.25, 37.03], [27.30, 37.00], [27.35, 36.98],
+    [27.40, 36.95], [27.42, 36.92], [27.40, 36.88], [27.35, 36.85],
+    [27.30, 36.83], [27.25, 36.82], [27.20, 36.83], [27.15, 36.85],
+    [27.12, 36.88], [27.10, 36.92], [27.12, 36.96], [27.15, 37.00],
+
+    // Gökova Körfezi Kuzey Kıyısı
+    [27.50, 37.05], [27.55, 37.06], [27.60, 37.07], [27.65, 37.08],
+    [27.70, 37.08], [27.75, 37.08], [27.80, 37.07], [27.85, 37.06],
+    [27.90, 37.04], [27.95, 37.02], [28.00, 37.00], [28.05, 36.98],
+    [28.10, 36.95], [28.15, 36.92], [28.20, 36.88], [28.25, 36.85],
+
+    // Fethiye - Ölüdeniz
+    [29.00, 36.65], [29.05, 36.62], [29.10, 36.58], [29.12, 36.55],
+    [29.10, 36.52], [29.05, 36.50], [29.00, 36.48],
+
+    // Kaş - Kalkan
+    [29.60, 36.20], [29.65, 36.18], [29.70, 36.15], [29.75, 36.12],
+    [29.80, 36.10], [29.85, 36.12], [29.90, 36.15],
+
+    // Meis Adası (Kastellorizo)
+    [29.58, 36.14], [29.60, 36.12], [29.62, 36.10], [29.58, 36.08],
+    [29.55, 36.10], [29.55, 36.13]
 ];
 
 // ===== Fetch (Rüzgar Mesafesi) Hesaplama =====
 /**
  * Verilen noktadan rüzgar yönüne doğru en yakın kıyıya olan mesafeyi hesaplar
- * @param {number} lat - Enlem
- * @param {number} lng - Boylam
- * @param {number} windDirection - Rüzgar yönü (derece, rüzgarın geldiği yön)
- * @returns {object} - { fetchKm, isOffshore, coastDirection }
+ * Basitleştirilmiş algoritma: rüzgarın geldiği yöndeki en yakın kıyı noktasını bul
  */
 function calculateFetch(lat, lng, windDirection) {
     if (windDirection === null || windDirection === undefined) {
-        return { fetchKm: 999, isOffshore: false, coastDirection: null };
+        return { fetchKm: 999, isOffshore: false, hitCoast: false };
     }
 
-    // Rüzgarın geldiği yöne doğru ray çiz (rüzgar 180° ise güneyden geliyor, güneye bak)
+    // Rüzgarın geldiği yön (derece) - örn: 180 = güneyden esiyor
     const windFromRad = (windDirection * Math.PI) / 180;
 
-    // Ray başlangıç noktası
-    const startLat = lat;
-    const startLng = lng;
+    // Rüzgarın geldiği yöndeki birim vektör
+    const windDirX = Math.sin(windFromRad); // Doğu-Batı komponenti
+    const windDirY = Math.cos(windFromRad); // Kuzey-Güney komponenti
 
-    // Maksimum fetch mesafesi (km)
-    const maxFetchKm = 200;
+    let minFetch = 999;
+    let foundCoast = false;
 
-    // Ray üzerinde adım at ve kıyıya çarpıp çarpmadığını kontrol et
-    const stepKm = 1; // 1 km adımlar
-    const kmToDeg = 1 / 111; // Yaklaşık 1 km = 1/111 derece
+    // Her kıyı noktası için kontrol et
+    for (const [coastLng, coastLat] of COASTLINE_POINTS) {
+        // Kıyı noktasına olan vektör
+        const dLat = coastLat - lat;
+        const dLng = (coastLng - lng) * Math.cos(lat * Math.PI / 180); // Boylam düzeltmesi
 
-    let fetchKm = maxFetchKm;
-    let hitCoast = false;
+        // Mesafe (km)
+        const distance = Math.sqrt(dLat * dLat + dLng * dLng) * 111;
 
-    for (let dist = stepKm; dist <= maxFetchKm; dist += stepKm) {
-        // Rüzgarın geldiği yöne doğru ilerle
-        const checkLat = startLat + (dist * kmToDeg) * Math.cos(windFromRad);
-        const checkLng = startLng + (dist * kmToDeg) * Math.sin(windFromRad) / Math.cos(startLat * Math.PI / 180);
+        // Bu kıyı noktası rüzgarın geldiği yönde mi?
+        // Dot product ile kontrol - pozitifse aynı yönde
+        const dotProduct = dLng * windDirX + dLat * windDirY;
 
-        // Bu nokta karada mı?
-        if (isPointOnLand(checkLat, checkLng)) {
-            fetchKm = dist;
-            hitCoast = true;
-            break;
-        }
-    }
+        // Açı kontrolü - ±60 derece içinde olmalı
+        if (dotProduct > 0) {
+            const coastAngle = Math.atan2(dLng, dLat);
+            const angleDiff = Math.abs(windFromRad - coastAngle);
+            const normalizedDiff = Math.min(angleDiff, 2 * Math.PI - angleDiff);
 
-    // Offshore = rüzgar karadan esiyorsa (fetch < 10km)
-    const isOffshore = hitCoast && fetchKm < 15;
-
-    return {
-        fetchKm: fetchKm,
-        isOffshore: isOffshore,
-        hitCoast: hitCoast
-    };
-}
-
-/**
- * Basit nokta-kara kontrolü (Türkiye kıyı poligonu içinde mi?)
- */
-function isPointOnLand(lat, lng) {
-    // Türkiye ana karasının basit sınırları
-    // Ege/Akdeniz kıyı şeridi için yaklaşık kontrol
-
-    // Önce genel Türkiye sınırları içinde mi?
-    if (lat < 35.8 || lat > 42 || lng < 25.5 || lng > 45) {
-        return false; // Türkiye dışı
-    }
-
-    // Deniz alanları (kesinlikle kara değil)
-    // Ege Denizi
-    if (lng < 27 && lat < 40 && lat > 36) return false;
-    // Akdeniz açıkları
-    if (lat < 36 && lng > 27 && lng < 35) return false;
-    // Gökova Körfezi
-    if (lat > 36.7 && lat < 37.15 && lng > 27.4 && lng < 28.5) return false;
-
-    // Kıyı çizgisine yakınlık kontrolü
-    // Eğer kıyı çizgisinin "iç" tarafındaysa kara
-    return isInsideCoastline(lat, lng);
-}
-
-/**
- * Nokta kıyı çizgisinin kara tarafında mı?
- */
-function isInsideCoastline(lat, lng) {
-    // Ray casting algoritması - basitleştirilmiş
-    // Noktadan doğuya bir ray çiz, kıyı çizgisini kaç kez kestiğini say
-
-    let intersections = 0;
-    const n = TURKEY_COASTLINE.length;
-
-    for (let i = 0; i < n; i++) {
-        const [lng1, lat1] = TURKEY_COASTLINE[i];
-        const [lng2, lat2] = TURKEY_COASTLINE[(i + 1) % n];
-
-        // Ray (lat, lng) noktasından sağa doğru
-        if ((lat1 > lat) !== (lat2 > lat)) {
-            const intersectLng = lng1 + (lat - lat1) * (lng2 - lng1) / (lat2 - lat1);
-            if (lng < intersectLng) {
-                intersections++;
+            // ±60 derece (1.05 radyan) içindeyse fetch'e dahil et
+            if (normalizedDiff < 1.05 && distance < minFetch) {
+                minFetch = distance;
+                foundCoast = true;
             }
         }
     }
 
-    // Tek sayıda kesişim = içeride (kara)
-    return intersections % 2 === 1;
+    // Offshore = rüzgar karadan esiyorsa (kısa fetch)
+    const isOffshore = foundCoast && minFetch < 15;
+
+    return {
+        fetchKm: Math.round(minFetch),
+        isOffshore: isOffshore,
+        hitCoast: foundCoast
+    };
 }
 
 /**
