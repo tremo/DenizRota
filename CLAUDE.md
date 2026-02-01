@@ -9,12 +9,14 @@ This document provides guidance for AI assistants working with the DenizRota cod
 ### Key Features
 - Interactive map-based route planning with waypoints
 - Real-time weather and marine forecasts along routes
-- Wind and wave overlay visualizations
+- Wind and wave overlay visualizations with particle animations
+- **Coastal fetch calculation** for realistic wave predictions near shore
 - Fuel consumption and cost calculations
 - GPS-based trip tracking with history
 - User authentication (Email/Password, Google OAuth)
 - Cloud sync with Firebase Firestore
 - Saved routes management
+- Weather auto-refresh capability
 - Responsive design for mobile and desktop
 
 ## Technology Stack
@@ -34,10 +36,10 @@ This document provides guidance for AI assistants working with the DenizRota cod
 
 ```
 /DenizRota
-├── index.html          # HTML structure and UI components
-├── app.js              # Core application logic (~2800 lines)
-├── firebase-config.js  # Firebase Auth & Firestore integration (~700 lines)
-├── styles.css          # Styling and responsive design (~1750 lines)
+├── index.html          # HTML structure and UI components (~730 lines)
+├── app.js              # Core application logic (~3160 lines)
+├── firebase-config.js  # Firebase Auth & Firestore integration (~690 lines)
+├── styles.css          # Styling and responsive design (~1860 lines)
 └── CLAUDE.md           # This file
 ```
 
@@ -46,38 +48,62 @@ This document provides guidance for AI assistants working with the DenizRota cod
 ## Architecture
 
 ### State Management
-The application uses a single centralized `state` object in `app.js:7-50`:
+The application uses a single centralized `state` object in `app.js:7-52`:
 
 ```javascript
 const state = {
-    routeMode: false,       // Route editing mode
-    waypoints: [],          // Route waypoints with weather data
-    markers: [],            // Leaflet markers
-    polyline: null,         // Route line
+    routeMode: false,           // Route editing mode
+    waypoints: [],              // Route waypoints with weather data
+    markers: [],                // Leaflet markers
+    polyline: null,             // Route line
     windOverlayVisible: false,
+    windLayer: null,
+    windCanvas: null,
+    windAnimationId: null,
+    windParticles: [],
     waveOverlayVisible: false,
-    tripActive: false,      // GPS tracking state
-    tripPositions: [],      // GPS track history
-    settings: { ... }       // Boat configuration
+    waveLayer: null,
+    waveCanvas: null,
+    waveAnimationId: null,
+    weatherCache: new Map(),    // API response cache
+    windGridData: [],           // Wind grid data
+    waveGridData: [],           // Wave grid data
+    weatherRefreshInterval: null, // Auto-refresh timer
+    isFullscreen: false,
+    tripActive: false,          // GPS tracking state
+    tripStartTime: null,
+    tripTimerInterval: null,
+    tripWatchId: null,
+    tripPositions: [],          // GPS track history
+    tripCurrentSpeed: 0,
+    tripMaxSpeed: 0,
+    tripTotalDistance: 0,
+    tripLastPosition: null,
+    currentTrip: null,
+    userLocationMarker: null,
+    userAccuracyCircle: null,
+    tripPolyline: null,
+    settings: { ... }           // Boat configuration
 };
 ```
 
 ### Main Modules (in app.js)
 
-| Section | Description |
-|---------|-------------|
-| State Management | Central state object |
-| Open-Meteo API | Weather and marine data fetching |
-| Map Initialization | Leaflet setup with OpenSeaMap |
-| Waypoint Management | Add, move, delete waypoints |
-| Route Calculations | Distance, time, fuel calculations |
-| Wind Overlay | Canvas-based particle animation |
-| Wave Overlay | Animated wave visualization |
-| Trip Tracking | GPS tracking and speed monitoring |
-| Trip History | LocalStorage persistence |
-| Saved Routes | Route saving and loading |
-| Settings | Boat configuration management |
-| UI Event Handlers | Button clicks, keyboard shortcuts |
+| Section | Lines | Description |
+|---------|-------|-------------|
+| State Management | 7-52 | Central state object |
+| Open-Meteo API | 54-356 | Weather and marine data fetching |
+| Fetch Calculation | 58-216 | Coastal wind distance calculation |
+| Map Initialization | 358-437 | Leaflet setup with OpenSeaMap |
+| Wind Particle System | 439-700+ | Canvas-based particle animation |
+| Wave Overlay | 700-900+ | Animated wave visualization |
+| Waypoint Management | varies | Add, move, delete waypoints |
+| Route Calculations | varies | Distance, time, fuel calculations |
+| Trip Tracking | varies | GPS tracking and speed monitoring |
+| Trip History | varies | LocalStorage persistence |
+| Saved Routes | 2951-3162 | Route saving and loading |
+| Settings | varies | Boat configuration management |
+| UI Event Handlers | varies | Button clicks, keyboard shortcuts |
 
 ### Firebase Module (in firebase-config.js)
 
@@ -100,7 +126,50 @@ const OPEN_METEO_WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
 const OPEN_METEO_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 ```
 
+**API Features:**
+- 7-day forecast horizon
+- Hourly data resolution
+- Automatic timezone handling
+- Exponential backoff retry (3 retries: 2s, 4s, 8s delays)
+
 **Caching:** API responses are cached for 1 hour per 0.01° grid cell.
+
+## Coastal Fetch Calculation
+
+The application includes a sophisticated fetch calculation system for more accurate wave predictions near coastlines.
+
+### What is Fetch?
+**Fetch** is the distance over open water that wind travels before reaching a point. Short fetch = smaller waves, even with strong winds.
+
+### Implementation (app.js:58-216)
+
+```javascript
+// Key functions:
+calculateFetch(lat, lng, windDirection)  // Calculate fetch distance
+isPointOnLand(lat, lng)                  // Check if point is on land
+isInsideCoastline(lat, lng)              // Ray casting for land detection
+getWaveAdjustmentFactor(fetchKm)         // Get wave reduction factor
+adjustWaveForFetch(waveHeight, fetchKm)  // Apply fetch adjustment
+```
+
+### Fetch Adjustment Factors
+
+| Fetch Distance | Wave Factor | Description |
+|----------------|-------------|-------------|
+| < 3 km | 0.1 | Very short fetch - almost flat |
+| 3-5 km | 0.2 | Short fetch |
+| 5-10 km | 0.35 | Medium-short fetch |
+| 10-20 km | 0.5 | Medium fetch |
+| 20-50 km | 0.7 | Long fetch |
+| > 50 km | 1.0 | Open sea |
+
+### Turkey Coastline Data
+The app includes simplified coastline coordinates (`TURKEY_COASTLINE` array) covering:
+- Northern Aegean (Çanakkale - İzmir)
+- Southern Aegean (Bodrum - Marmaris)
+- Datça Peninsula
+- Mediterranean coast (Fethiye - Mersin)
+- Gökova and Hisarönü Bays
 
 ## Code Conventions
 
@@ -114,9 +183,11 @@ const OPEN_METEO_MARINE_URL = 'https://marine-api.open-meteo.com/v1/marine';
 toggleWindOverlay()
 updateWaypointPosition()
 calculateRouteStats()
+calculateFetch()
 
 // Event handlers exposed globally for HTML onclick
 window.removeWaypoint = function(id) { ... }
+window.loadSavedRoute = function(routeId) { ... }
 ```
 
 ### Section Organization
@@ -153,16 +224,20 @@ Code sections are marked with comment delimiters:
     weather: {
         windSpeed: number,      // km/h
         windDirection: number,  // degrees
+        windGusts: number,      // km/h
         temperature: number,    // celsius
-        waveHeight: number,     // meters
-        wavePeriod: number      // seconds
+        waveHeight: number,     // meters (fetch-adjusted)
+        waveDirection: number,  // degrees
+        wavePeriod: number,     // seconds
+        swellHeight: number,    // meters
+        swellPeriod: number     // seconds
     },
     riskLevel: 'green' | 'yellow' | 'red' | 'gray',
     loading: boolean
 }
 ```
 
-### Trip (stored in LocalStorage)
+### Trip (stored in LocalStorage/Firestore)
 ```javascript
 {
     id: timestamp,
@@ -177,11 +252,24 @@ Code sections are marked with comment delimiters:
 }
 ```
 
-### Settings (stored in LocalStorage)
+### Saved Route
+```javascript
+{
+    id: string,
+    name: string,
+    description: string,
+    waypoints: [{ lat, lng }],
+    totalDistance: number,
+    waypointCount: number,
+    createdAt: ISO string
+}
+```
+
+### Settings (stored in LocalStorage/Firestore)
 ```javascript
 {
     boatName: string,
-    boatType: 'motorlu' | 'yelkenli',
+    boatType: 'motorlu' | 'yelkenli' | 'gulet' | 'katamaran' | 'sürat',
     avgSpeed: number,       // km/h
     fuelRate: number,       // liters/hour
     tankCapacity: number,   // liters
@@ -213,10 +301,29 @@ Weather risk is calculated based on wind and wave conditions:
 
 | Level | Wind (km/h) | Wave Height (m) | Marker Color |
 |-------|-------------|-----------------|--------------|
-| Green | < 20 | < 1 | Green |
-| Yellow | 20-30 | 1-2 | Yellow/Orange |
-| Red | > 30 | > 2 | Red |
+| Green | 0-15 | < 0.5 | Green |
+| Yellow | 15-30 | 0.5-1.5 | Yellow/Orange |
+| Red | 30+ | > 1.5 | Red |
 | Gray | No data | No data | Gray |
+
+## Mobile Optimizations
+
+The application includes specific optimizations for mobile devices:
+
+### Particle Count Optimization
+```javascript
+function getParticleCount() {
+    // Mobile (< 768px): 600 particles
+    // Tablet: 1200 particles
+    // Desktop: 3000 particles
+}
+```
+
+### Mobile-specific CSS
+- Collapsible sidebar on mobile
+- Touch-friendly button sizes
+- Responsive map controls
+- Compact speed panel positioning
 
 ## Development Workflow
 
@@ -234,7 +341,9 @@ Simply open `index.html` in a browser - no build step required.
 - Wind/wave overlay toggle
 - Trip tracking start/stop
 - Settings persistence
+- Saved routes save/load
 - Mobile responsiveness
+- Firebase authentication (if configured)
 
 ## Common Modification Patterns
 
@@ -244,13 +353,14 @@ Simply open `index.html` in a browser - no build step required.
 3. Add event handler in `app.js` (in `init()` function or as global function)
 
 ### Adding a New State Property
-1. Add to `state` object in `app.js:7-50`
+1. Add to `state` object in `app.js:7-52`
 2. Initialize in `init()` if needed
 3. Save/load from LocalStorage if persistence needed
 
 ### Modifying Weather Processing
-- `fetchWeather()` - API calls
+- `fetchWeather()` - API calls with retry logic
 - `getWeatherFromAPI()` - Data extraction
+- `calculateFetch()` - Coastal wave adjustment
 - `getRiskLevel()` - Risk classification
 - `updateWaypointWeather()` - UI updates
 
@@ -259,14 +369,20 @@ Simply open `index.html` in a browser - no build step required.
 - Marker creation in `addWaypoint()`
 - Overlay rendering in `renderWindOverlay()` and `renderWaveOverlay()`
 
+### Adding New Boat Types
+1. Add option in `index.html` Settings Modal (`#boatType` select)
+2. No code changes needed - type is stored as string
+
 ## Performance Considerations
 
 - **Canvas rendering** for overlays (not DOM elements)
 - **RequestAnimationFrame** for smooth animations
 - **Promise.all()** for parallel API calls
+- **Adaptive particle count** based on device screen size
 - **Geolocation filtering**: Accuracy > 50m ignored
 - **Distance jump filtering**: > 1km jumps ignored (GPS noise)
 - **API caching**: 1 hour per location
+- **Exponential backoff**: Auto-retry failed API calls
 
 ## Important Functions Reference
 
@@ -275,14 +391,19 @@ Simply open `index.html` in a browser - no build step required.
 | `init()` | app.js | Application entry point |
 | `initMap()` | app.js | Leaflet map setup |
 | `addWaypoint()` | app.js | Create new route point |
-| `fetchWeather()` | app.js:56 | Get weather data |
+| `fetchWeather()` | app.js:218 | Get weather data with retry |
+| `calculateFetch()` | app.js:100 | Coastal fetch distance |
+| `getWaveAdjustmentFactor()` | app.js:200 | Fetch-based wave reduction |
 | `calculateRouteStats()` | app.js | Distance/time/fuel calculations |
 | `toggleWindOverlay()` | app.js | Wind particle animation |
 | `toggleWaveOverlay()` | app.js | Wave visualization |
+| `getParticleCount()` | app.js:441 | Device-adaptive particle count |
 | `startTrip()` | app.js | Begin GPS tracking |
 | `endTrip()` | app.js | Stop tracking, save trip |
 | `loadSettings()` | app.js | Load from LocalStorage |
 | `saveSettings()` | app.js | Save to LocalStorage |
+| `loadSavedRoute()` | app.js:3101 | Load saved route |
+| `confirmSaveRoute()` | app.js:2997 | Save current route |
 
 ## Firebase Integration
 
@@ -319,6 +440,22 @@ users/{userId}/
     └── { name, waypoints, ... }
 ```
 
+## Sea Area Detection
+
+The app defines sea areas around Turkey for overlay rendering:
+
+```javascript
+const SEA_AREAS = [
+    { name: 'Marmara', bounds: {...} },
+    { name: 'Ege', bounds: {...} },
+    { name: 'Karadeniz', bounds: {...} },
+    { name: 'Akdeniz', bounds: {...} },
+    { name: 'Boğaz', bounds: {...} }
+];
+```
+
+Land exclusion areas prevent rendering overlays on peninsulas and large landmasses.
+
 ## Gotchas and Edge Cases
 
 1. **Marine API is optional** - The app continues if marine data fails
@@ -329,10 +466,14 @@ users/{userId}/
 6. **LocalStorage limits** - Trip/route history capped at 50 entries
 7. **Firebase is optional** - App works fully offline with LocalStorage when Firebase is not configured
 8. **Data migration** - Users can migrate LocalStorage data to Firestore after signing in
+9. **Fetch calculation** - Only applies to Turkish coastlines; open sea gets full wave values
+10. **API retry** - Failed weather calls retry 3 times with exponential backoff
 
 ## Version Information
 
-CSS files are versioned via query parameters:
-- `styles.css?v=2.2`
+Files are versioned via query parameters for cache busting:
+- `styles.css?v=2.3`
+- `app.js?v=2.5`
+- `firebase-config.js?v=1.0`
 
-This helps with cache busting during development.
+Update these version numbers when making changes to ensure browsers load fresh files.
